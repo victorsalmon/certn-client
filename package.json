@@ -1,0 +1,59 @@
+{
+  "name": "@clocklobster/certn-client",
+  "publishConfig": {
+    "access": "public"
+  },
+  "version": "1.0.0",
+  "description": "Product-neutral Certn Centric screening client (case ordering, report fetch, PDF retrieval, X-Signature webhook verification)",
+  "license": "MIT",
+  "author": "Victor Salmon",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/victorsalmon/certn-client.git"
+  },
+  "homepage": "https://github.com/victorsalmon/certn-client#readme",
+  "bugs": {
+    "url": "https://github.com/victorsalmon/certn-client/issues"
+  },
+  "keywords": [
+    "certn",
+    "certncentric",
+    "screening",
+    "tenant-screening",
+    "background-check",
+    "credit-report",
+    "identity-verification",
+    "webhook",
+    "client"
+  ],
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./profiles": {
+      "import": "./dist/profiles.js",
+      "types": "./dist/profiles.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "postinstall": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:mutation": "stryker run"
+  },
+  "devDependencies": {
+    "@stryker-mutator/core": "^10.0.0",
+    "@stryker-mutator/vitest-runner": "^10.0.0",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.7"
+  }
+}
