@@ -10,7 +10,7 @@ case ordering, report fetch, PDF retrieval, and X-Signature webhook verification
 
 > **Reference implementation.** This client is a product-neutral, standalone version of the
 > Certn Centric integration pattern. It was last validated against the Certn Centric sandbox
-> docs as of 2026-08-15, but **re-fetch the [live Certn docs](https://docs.certn.co)**
+> docs as of 2026-08-21, but **re-fetch the [live Certn docs](https://docs.certn.co)**
 > before relying on endpoint specifics in production. Pull requests are welcome.
 
 ---

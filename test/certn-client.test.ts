@@ -75,7 +75,7 @@ describe('CertnClient', () => {
     const raw = {
       id: 'case-123',
       short_id: 'C123',
-      created: '2026-08-15T10:00:00Z',
+      created: '2026-08-21T10:00:00Z',
       overall_status: 'COMPLETE',
       overall_score: 'CLEAR',
       input_claims: { date_of_birth: '1990-01-01' },
@@ -394,7 +394,7 @@ describe('CertnClient', () => {
     const raw = {
       id: 'case-123',
       short_id: 'C123',
-      created: '2026-08-01T10:00:00Z',
+      created: '2026-08-21T10:00:00Z',
       overall_status: 'COMPLETE',
       checks: [
         {
@@ -414,7 +414,7 @@ describe('CertnClient', () => {
   it('normalizes reports: identity check with id_verified false and created fallback for completedAt', async () => {
     const raw = {
       id: 'case-123',
-      created: '2026-08-01T10:00:00Z',
+      created: '2026-08-21T10:00:00Z',
       overall_status: 'COMPLETE',
       checks: [
         {
@@ -429,7 +429,7 @@ describe('CertnClient', () => {
     vi.stubGlobal('fetch', vi.fn(async () => okJson(raw)));
     const report = await makeClient().fetchReport('case-123');
     expect(report.idVerified).toBe(false);
-    expect(report.completedAt).toBe('2026-08-01T10:00:00Z');
+    expect(report.completedAt).toBe('2026-08-21T10:00:00Z');
     expect(JSON.stringify(report.reportJsonb)).not.toContain('id_verified');
   });
 
@@ -593,7 +593,7 @@ describe('CertnClient', () => {
           id: 'case-123',
           invite_link: 'https://invite',
           short_id: 'C1',
-          created: '2026-08-01T00:00:00Z',
+          created: '2026-08-21T00:00:00Z',
           overall_status: 'COMPLETE',
           checks: [],
         },
@@ -644,8 +644,8 @@ describe('CertnClient', () => {
     const raw = {
       id: 'case-123',
       short_id: 'C123',
-      created: '2026-08-01T10:00:00Z',
-      modified: '2026-08-02T10:00:00Z',
+      created: '2026-08-21T10:00:00Z',
+      modified: '2026-08-21T10:00:00Z',
       overall_status: 'COMPLETE',
       overall_score: 'CLEAR',
       checks: [
@@ -666,7 +666,7 @@ describe('CertnClient', () => {
     expect(report.reportJsonb).toMatchObject({
       id: 'case-123',
       short_id: 'C123',
-      created: '2026-08-01T10:00:00Z',
+      created: '2026-08-21T10:00:00Z',
       overall_status: 'COMPLETE',
       overall_score: 'CLEAR',
     });
@@ -687,7 +687,7 @@ describe('CertnClient', () => {
   it('computes idVerified from identity score and sub-score when explicit booleans are absent', async () => {
     const base = {
       id: 'case-123',
-      created: '2026-08-01T10:00:00Z',
+      created: '2026-08-21T10:00:00Z',
       overall_status: 'COMPLETE',
       checks: [
         {
