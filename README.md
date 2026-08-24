@@ -8,11 +8,10 @@
 A product-neutral TypeScript client for the [Certn Centric](https://certn.co) screening API —
 case ordering, report fetch, PDF retrieval, and X-Signature webhook verification.
 
-> **Status: deprecated / unmaintained.** This client was extracted from a private monorepo
-> and published for reference. The originating project never completed the Certn integration
-> in production (SingleKey apply-link handoff was used instead). The code is correct against
-> the Certn Centric sandbox docs as of 2026-08-15, but **re-fetch the [live Certn docs](https://docs.certn.co)**
-> before relying on endpoint specifics. Pull requests are welcome.
+> **Reference implementation.** This client is a product-neutral, standalone version of the
+> Certn Centric integration pattern. It was last validated against the Certn Centric sandbox
+> docs as of 2026-08-15, but **re-fetch the [live Certn docs](https://docs.certn.co)**
+> before relying on endpoint specifics in production. Pull requests are welcome.
 
 ---
 
@@ -374,8 +373,8 @@ All paths are relative to the configured `baseUrl` (sandbox or production).
 
 ## Contributing
 
-Pull requests welcome. The client is deprecated/unmaintained but correctness
-fixes (endpoint changes, new check identifiers) are appreciated.
+Pull requests welcome. Correctness fixes (endpoint changes, new check identifiers)
+and documentation improvements are appreciated.
 
 ## License
 
