@@ -30,7 +30,10 @@ function asString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
-function getHeader(headers: Record<string, string>, name: string): string | undefined {
+function getHeaderValueCaseInsensitive(
+  headers: Record<string, string>,
+  name: string
+): string | undefined {
   const lower = name.toLowerCase();
   for (const [key, value] of Object.entries(headers)) {
     if (key.toLowerCase() === lower) return value;
@@ -59,8 +62,40 @@ function firstBoolean(...values: unknown[]): boolean | null {
   return null;
 }
 
-function delay(ms: number): Promise<void> {
+function waitMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function findCheckByTypeKeyword(
+  checks: JsonObject[],
+  keyword: string
+): JsonObject | undefined {
+  return checks.find((check) => String(check.type ?? '').toUpperCase().includes(keyword));
+}
+
+function normalizeIdentityVerification(
+  identityCheck: JsonObject | undefined
+): boolean | null {
+  if (identityCheck === undefined) return null;
+  return firstBoolean(
+    identityCheck.id_verified,
+    identityCheck.idVerified,
+    asString(identityCheck.score) === IDENTITY_SCORE_CLEAR ||
+      asString(identityCheck.sub_score) === IDENTITY_SUB_SCORE_VERIFIED
+  );
+}
+
+function toReportCheck(check: JsonObject): JsonObject {
+  return {
+    id: check.id,
+    short_id: check.short_id,
+    type: check.type,
+    status: check.status,
+    score: check.score,
+    sub_score: check.sub_score,
+    adjudication_score: check.adjudication_score,
+    adjudication_sub_score: check.adjudication_sub_score,
+  };
 }
 
 // Certn API protocol constants. Keeping them as named values makes it easier to
@@ -175,7 +210,7 @@ export class CertnClient {
         if (!response.ok) throw new Error(`Certn PDF download failed: HTTP ${response.status}`);
         return Buffer.from(await response.arrayBuffer());
       }
-      await delay(PDF_POLL_BACKOFF_MS);
+      await waitMs(PDF_POLL_BACKOFF_MS);
     }
     throw new Error('Certn report PDF did not become available before timeout');
   }
@@ -191,7 +226,7 @@ export class CertnClient {
     headers: Record<string, string>,
     rawBody?: string
   ): Promise<WebhookResult> {
-    const signature = getHeader(headers, 'X-Signature');
+    const signature = getHeaderValueCaseInsensitive(headers, 'X-Signature');
     if (!rawBody || !this.validSignature(signature, rawBody)) {
       throw new CertnWebhookSignatureError();
     }
@@ -265,19 +300,9 @@ export class CertnClient {
 
   private mapReport(data: JsonObject): ScreeningReport {
     const checks = Array.isArray(data.checks) ? data.checks.map(asObject) : [];
-    const creditCheck = checks.find((check) =>
-      String(check.type ?? '')
-        .toUpperCase()
-        .includes('CREDIT')
-    );
-    const identityCheck = checks.find((check) =>
-      String(check.type ?? '')
-        .toUpperCase()
-        .includes('IDENTITY')
-    );
+    const creditCheck = findCheckByTypeKeyword(checks, CREDIT_CHECK_TYPE_KEYWORD);
+    const identityCheck = findCheckByTypeKeyword(checks, IDENTITY_CHECK_TYPE_KEYWORD);
     const creditClaims = asObject(creditCheck?.output_claims);
-    const identityScore = asString(identityCheck?.score);
-    const identitySubScore = asString(identityCheck?.sub_score);
 
     // Store only normalized outcomes and check metadata. Do not persist
     // input_claims, output_claims, email addresses, or identity documents.
@@ -287,16 +312,7 @@ export class CertnClient {
       created: data.created,
       overall_status: data.overall_status,
       overall_score: data.overall_score,
-      checks: checks.map((check) => ({
-        id: check.id,
-        short_id: check.short_id,
-        type: check.type,
-        status: check.status,
-        score: check.score,
-        sub_score: check.sub_score,
-        adjudication_score: check.adjudication_score,
-        adjudication_sub_score: check.adjudication_sub_score,
-      })),
+      checks: checks.map(toReportCheck),
     };
 
     return {
@@ -307,15 +323,7 @@ export class CertnClient {
         creditCheck?.creditScore
       ),
       evictionCount: null,
-      idVerified:
-        identityCheck === undefined
-          ? null
-          : firstBoolean(
-              identityCheck.id_verified,
-              identityCheck.idVerified,
-              identityScore === IDENTITY_SCORE_CLEAR ||
-              identitySubScore === IDENTITY_SUB_SCORE_VERIFIED
-            ),
+      idVerified: normalizeIdentityVerification(identityCheck),
       reportJsonb,
       completedAt: asString(data.modified) ?? asString(data.created) ?? new Date().toISOString(),
     };
