@@ -23,6 +23,7 @@ export interface ScreeningProfile {
   readonly label: string;
 }
 
+/** Allow-listed profile used when the caller does not specify one. */
 export const DEFAULT_PROFILE_NAME = 'identity';
 
 export const SCREENING_PROFILES: readonly ScreeningProfile[] = [
@@ -61,6 +62,7 @@ export const SCREENING_PROFILES: readonly ScreeningProfile[] = [
   },
 ];
 
+/** Comma-separated list of allow-listed profile names for error messages. */
 const ALLOWED_PROFILE_NAMES = SCREENING_PROFILES.map((p) => p.name).join(', ');
 
 const PROFILE_BY_NAME: ReadonlyMap<string, ScreeningProfile> = new Map(

@@ -26,10 +26,12 @@ import type { CertnClientConfig } from './config.js';
 
 type JsonObject = Record<string, unknown>;
 
+/** Return a non-empty string, or `undefined` for non-strings and empty values. */
 function asString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+/** Find a header by name, ignoring case (HTTP headers are case-insensitive). */
 function getHeaderValueCaseInsensitive(
   headers: Record<string, string>,
   name: string
@@ -41,10 +43,12 @@ function getHeaderValueCaseInsensitive(
   return undefined;
 }
 
+/** Treat a value as a plain object; arrays and non-objects become an empty object. */
 function asObject(value: unknown): JsonObject {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as JsonObject) : {};
 }
 
+/** Return the first finite number, or the first numeric string coerced to a number. */
 function firstNumber(...values: unknown[]): number | null {
   for (const value of values) {
     if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -55,6 +59,7 @@ function firstNumber(...values: unknown[]): number | null {
   return null;
 }
 
+/** Return the first boolean argument, or `null` if none is present. */
 function firstBoolean(...values: unknown[]): boolean | null {
   for (const value of values) {
     if (typeof value === 'boolean') return value;
@@ -62,10 +67,15 @@ function firstBoolean(...values: unknown[]): boolean | null {
   return null;
 }
 
+/** Pause for the given number of milliseconds. */
 function waitMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Find the first check whose `type` contains the keyword, case-insensitively.
+ * Certn check identifiers include a category prefix (e.g. `CREDIT_REPORT_1`).
+ */
 function findCheckByTypeKeyword(
   checks: JsonObject[],
   keyword: string
@@ -73,6 +83,7 @@ function findCheckByTypeKeyword(
   return checks.find((check) => String(check.type ?? '').toUpperCase().includes(keyword));
 }
 
+/** Derive the normalized `idVerified` flag from an identity check, if present. */
 function normalizeIdentityVerification(
   identityCheck: JsonObject | undefined
 ): boolean | null {
@@ -85,6 +96,7 @@ function normalizeIdentityVerification(
   );
 }
 
+/** Build the PII-stripped check shape that is safe to persist. */
 function toReportCheck(check: JsonObject): JsonObject {
   return {
     id: check.id,
@@ -122,6 +134,7 @@ const IDENTITY_CHECK_TYPE_KEYWORD = 'IDENTITY';
 
 const SHA256_SIGNATURE_PREFIX_PATTERN = /^sha256=/i;
 
+/** Product-neutral Certn Centric screening client. */
 export class CertnClient {
   private readonly baseUrl: string;
 
@@ -135,6 +148,9 @@ export class CertnClient {
    * `profileName` (allow-listed) selects which checks to order; it overrides
    * the configured `config.profileName`. The returned `purchaseToken` is the
    * Certn case id used by subsequent calls (fetchReport, fetchPdf, cancelCase).
+   *
+   * `_applicantName` is intentionally ignored: Certn's public API does not accept
+   * an applicant name in the order payload.
    */
   async invite(
     applicantEmail: string,
