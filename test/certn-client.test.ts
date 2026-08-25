@@ -1,9 +1,10 @@
 import { createHmac } from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CertnClient } from '../src/client.js';
+import { CertnClient, createCertnClient } from '../src/client.js';
 import { CertnWebhookSignatureError } from '../src/types.js';
 import { isScreeningProfile, getScreeningProfile } from '../src/profiles.js';
 import { createCertnConfigFromEnv } from '../src/config.js';
+import { verifySecret, safeEqual } from '../src/util.js';
 
 const BASE_URL = 'https://api.sandbox.certn.co';
 const WEBHOOK_SECRET = 'certn-webhook-test-secret';
@@ -778,5 +779,508 @@ describe('profiles', () => {
     expect(getScreeningProfile('identity').label).toBe('Identity verification');
     expect(getScreeningProfile('credit').label).toBe('Credit report');
     expect(getScreeningProfile('risk').label).toBe('Risk screening (criminal record)');
+  });
+});
+
+describe('CertnClient – additional mutation-killing tests', () => {
+  it('invite throws when response id is an empty string (asString rejects empty strings)', async () => {
+    const fetchMock = vi.fn(async () => okJson({ id: '', invite_link: 'https://invite' }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(makeClient().invite('jane@example.com')).rejects.toThrow(
+      'missing id/invite_link'
+    );
+  });
+
+  it('invite throws when response invite_link is an empty string', async () => {
+    const fetchMock = vi.fn(async () => okJson({ id: 'case-1', invite_link: '' }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(makeClient().invite('jane@example.com')).rejects.toThrow(
+      'missing id/invite_link'
+    );
+  });
+
+  it('invite throws when response id is a non-string type', async () => {
+    const fetchMock = vi.fn(async () => okJson({ id: 123, invite_link: 'https://invite' }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(makeClient().invite('jane@example.com')).rejects.toThrow(
+      'missing id/invite_link'
+    );
+  });
+
+  it('parseWebhook matches X-Signature case-insensitively', async () => {
+    const rawBody = JSON.stringify({
+      event_id: 'event-ci',
+      event_type: 'CASE_REPORT_READY',
+      object_id: 'case-123',
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => okJson({ id: 'case-123', overall_status: 'COMPLETE', checks: [] }))
+    );
+    const hex = createHmac('sha256', WEBHOOK_SECRET).update(rawBody).digest('hex');
+    const result = await makeClient().parseWebhook(
+      JSON.parse(rawBody),
+      { 'x-signature': hex },
+      rawBody
+    );
+    expect(result).toMatchObject({ status: 'completed' });
+  });
+
+  it('parseWebhook treats array payload as empty object (no object_id)', async () => {
+    const rawBody = JSON.stringify({ event_type: 'CASE_STATUS_CHANGED' });
+    vi.stubGlobal('fetch', vi.fn(async () => okJson({})));
+    const hex = createHmac('sha256', WEBHOOK_SECRET).update(rawBody).digest('hex');
+    const result = await makeClient().parseWebhook([], { 'X-Signature': hex }, rawBody);
+    expect(result).toEqual({ applicationId: '', status: 'error' });
+  });
+
+  it('fetchReport maps credit score from string numeric credit_score', async () => {
+    const raw = {
+      id: 'case-123',
+      created: '2026-08-21T10:00:00Z',
+      overall_status: 'COMPLETE',
+      checks: [
+        {
+          id: 'c1',
+          type: 'CREDIT_REPORT_1',
+          status: 'COMPLETE',
+          output_claims: { credit_score: '720' },
+        },
+      ],
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => okJson(raw)));
+    const report = await makeClient().fetchReport('case-123');
+    expect(report.creditScore).toBe(720);
+  });
+
+  it('fetchReport returns null creditScore when credit_score is NaN string', async () => {
+    const raw = {
+      id: 'case-123',
+      created: '2026-08-21T10:00:00Z',
+      overall_status: 'COMPLETE',
+      checks: [
+        {
+          id: 'c1',
+          type: 'CREDIT_REPORT_1',
+          status: 'COMPLETE',
+          output_claims: { credit_score: 'not-a-number' },
+        },
+      ],
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => okJson(raw)));
+    const report = await makeClient().fetchReport('case-123');
+    expect(report.creditScore).toBeNull();
+  });
+
+  it('fetchReport returns null creditScore when credit_score is Infinity', async () => {
+    const raw = {
+      id: 'case-123',
+      created: '2026-08-21T10:00:00Z',
+      overall_status: 'COMPLETE',
+      checks: [
+        {
+          id: 'c1',
+          type: 'CREDIT_REPORT_1',
+          status: 'COMPLETE',
+          output_claims: { credit_score: Infinity },
+        },
+      ],
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => okJson(raw)));
+    const report = await makeClient().fetchReport('case-123');
+    expect(report.creditScore).toBeNull();
+  });
+
+  it('idVerified is true when only score=CLEAR (sub_score absent)', async () => {
+    const raw = {
+      id: 'case-123',
+      created: '2026-08-21T10:00:00Z',
+      overall_status: 'COMPLETE',
+      checks: [
+        {
+          id: 'c1',
+          type: 'IDENTITY_VERIFICATION_1',
+          status: 'COMPLETE',
+          score: 'CLEAR',
+        },
+      ],
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => okJson(raw)));
+    const report = await makeClient().fetchReport('case-123');
+    expect(report.idVerified).toBe(true);
+  });
+
+  it('idVerified is true when only sub_score=VERIFIED (score absent)', async () => {
+    const raw = {
+      id: 'case-123',
+      created: '2026-08-21T10:00:00Z',
+      overall_status: 'COMPLETE',
+      checks: [
+        {
+          id: 'c1',
+          type: 'IDENTITY_VERIFICATION_1',
+          status: 'COMPLETE',
+          sub_score: 'VERIFIED',
+        },
+      ],
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => okJson(raw)));
+    const report = await makeClient().fetchReport('case-123');
+    expect(report.idVerified).toBe(true);
+  });
+
+  it('strips multiple trailing slashes from baseUrl', async () => {
+    const client = new CertnClient({
+      baseUrl: 'https://api.sandbox.certn.co///',
+      apiKey: 'certn-api-key',
+      webhookSecret: WEBHOOK_SECRET,
+    });
+    const fetchMock = vi.fn(async (url: string) => {
+      expect(url).toBe('https://api.sandbox.certn.co/api/public/cases/case-123');
+      return okJson({ id: 'case-123', overall_status: 'COMPLETE', checks: [] });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await client.fetchReport('case-123');
+  });
+
+  it('orders without tags when tags array is empty', async () => {
+    const client = new CertnClient({
+      baseUrl: BASE_URL,
+      apiKey: 'certn-api-key',
+      webhookSecret: WEBHOOK_SECRET,
+      profileName: 'identity',
+      tags: [],
+    });
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      expect(body).not.toHaveProperty('tags');
+      return okJson({ id: 'case-notags', invite_link: 'https://invite' }, 201);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await client.invite('jane@example.com');
+  });
+
+  it('orders without group when group is undefined', async () => {
+    const client = new CertnClient({
+      baseUrl: BASE_URL,
+      apiKey: 'certn-api-key',
+      webhookSecret: WEBHOOK_SECRET,
+      profileName: 'identity',
+    });
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      expect(body).not.toHaveProperty('group');
+      return okJson({ id: 'case-nogroup', invite_link: 'https://invite' }, 201);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await client.invite('jane@example.com');
+  });
+
+  it('orders without applicant_language when applicantLanguage is undefined', async () => {
+    const client = new CertnClient({
+      baseUrl: BASE_URL,
+      apiKey: 'certn-api-key',
+      webhookSecret: WEBHOOK_SECRET,
+      profileName: 'identity',
+    });
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      expect(body).not.toHaveProperty('applicant_language');
+      return okJson({ id: 'case-nolang', invite_link: 'https://invite' }, 201);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await client.invite('jane@example.com');
+  });
+
+  it('invite throws when response has no id field at all', async () => {
+    const fetchMock = vi.fn(async () => okJson({ invite_link: 'https://invite' }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(makeClient().invite('jane@example.com')).rejects.toThrow('missing id/invite_link');
+  });
+
+  it('invite throws when response has no invite_link field at all', async () => {
+    const fetchMock = vi.fn(async () => okJson({ id: 'case-1' }));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(makeClient().invite('jane@example.com')).rejects.toThrow('missing id/invite_link');
+  });
+
+  it('parseWebhook maps CASE_STATUS_CHANGED with non-complete non-cancelled status to in_progress', async () => {
+    const rawBody = JSON.stringify({
+      event_id: 'event-ip',
+      event_type: 'CASE_STATUS_CHANGED',
+      object_id: 'case-123',
+      case_status: 'IN_PROGRESS',
+    });
+    const result = await makeClient().parseWebhook(
+      JSON.parse(rawBody),
+      { 'X-Signature': signature(rawBody) },
+      rawBody
+    );
+    expect(result).toMatchObject({
+      applicationId: 'case-123',
+      status: 'in_progress',
+      eventId: 'event-ip',
+    });
+    expect(result.actionRequired).toBeFalsy();
+  });
+
+  it('request error includes HTTP method for GET requests', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ error: 'not found' }), { status: 404 }))
+    );
+    await expect(makeClient().fetchReport('case-404')).rejects.toThrow(
+      'Certn request failed: GET'
+    );
+  });
+});
+
+describe('createCertnConfigFromEnv – additional tests', () => {
+  it('throws on missing CERTN_WEBHOOK_SECRET', () => {
+    process.env.CERTN_API_KEY = 'api-key';
+    delete process.env.CERTN_WEBHOOK_SECRET;
+    expect(() => createCertnConfigFromEnv()).toThrow('CERTN_WEBHOOK_SECRET');
+  });
+
+  it('sets group to undefined when CERTN_GROUP is not set', () => {
+    process.env.CERTN_API_KEY = 'api-key';
+    process.env.CERTN_WEBHOOK_SECRET = 'webhook-secret';
+    delete process.env.CERTN_GROUP;
+    const config = createCertnConfigFromEnv();
+    expect(config.group).toBeUndefined();
+  });
+
+  it('sets applicantLanguage to undefined when CERTN_APPLICANT_LANGUAGE is not set', () => {
+    process.env.CERTN_API_KEY = 'api-key';
+    process.env.CERTN_WEBHOOK_SECRET = 'webhook-secret';
+    delete process.env.CERTN_APPLICANT_LANGUAGE;
+    const config = createCertnConfigFromEnv();
+    expect(config.applicantLanguage).toBeUndefined();
+  });
+
+  it('returns empty tags when CERTN_TAGS is not set', () => {
+    process.env.CERTN_API_KEY = 'api-key';
+    process.env.CERTN_WEBHOOK_SECRET = 'webhook-secret';
+    delete process.env.CERTN_TAGS;
+    const config = createCertnConfigFromEnv();
+    expect(config.tags).toEqual([]);
+  });
+
+  it('filters out non-string entries from CERTN_TAGS', () => {
+    process.env.CERTN_API_KEY = 'api-key';
+    process.env.CERTN_WEBHOOK_SECRET = 'webhook-secret';
+    process.env.CERTN_TAGS = JSON.stringify(['valid', 123, null, true, 'also-valid']);
+    const config = createCertnConfigFromEnv();
+    expect(config.tags).toEqual(['valid', 'also-valid']);
+  });
+
+  it('returns empty tags for non-array JSON in CERTN_TAGS', () => {
+    process.env.CERTN_API_KEY = 'api-key';
+    process.env.CERTN_WEBHOOK_SECRET = 'webhook-secret';
+    process.env.CERTN_TAGS = JSON.stringify({ not: 'an-array' });
+    const config = createCertnConfigFromEnv();
+    expect(config.tags).toEqual([]);
+  });
+
+  it('uses default profile when CERTN_PROFILE is not set', () => {
+    process.env.CERTN_API_KEY = 'api-key';
+    process.env.CERTN_WEBHOOK_SECRET = 'webhook-secret';
+    delete process.env.CERTN_PROFILE;
+    const config = createCertnConfigFromEnv();
+    expect(config.profileName).toBe('identity');
+  });
+
+  it('uses custom profile when CERTN_PROFILE is set', () => {
+    process.env.CERTN_API_KEY = 'api-key';
+    process.env.CERTN_WEBHOOK_SECRET = 'webhook-secret';
+    process.env.CERTN_PROFILE = 'credit';
+    const config = createCertnConfigFromEnv();
+    expect(config.profileName).toBe('credit');
+  });
+});
+
+describe('CertnWebhookSignatureError', () => {
+  it('has the correct default message', () => {
+    const err = new CertnWebhookSignatureError();
+    expect(err.message).toBe('Invalid Certn webhook signature');
+  });
+
+  it('has the correct name', () => {
+    const err = new CertnWebhookSignatureError();
+    expect(err.name).toBe('CertnWebhookSignatureError');
+  });
+
+  it('has statusCode 401', () => {
+    const err = new CertnWebhookSignatureError();
+    expect(err.statusCode).toBe(401);
+  });
+
+  it('accepts a custom message', () => {
+    const err = new CertnWebhookSignatureError('custom');
+    expect(err.message).toBe('custom');
+  });
+});
+
+describe('verifySecret', () => {
+  it('returns false for undefined provided value', () => {
+    expect(verifySecret(undefined, 'secret')).toBe(false);
+  });
+
+  it('returns false for empty string provided value', () => {
+    expect(verifySecret('', 'secret')).toBe(false);
+  });
+
+  it('returns false for empty expected value', () => {
+    expect(verifySecret('secret', '')).toBe(false);
+  });
+
+  it('returns true for matching values', () => {
+    expect(verifySecret('my-secret', 'my-secret')).toBe(true);
+  });
+
+  it('returns false for non-matching values of same length', () => {
+    expect(verifySecret('my-secret', 'my-Secret')).toBe(false);
+  });
+
+  it('returns false for non-matching values of different length', () => {
+    expect(verifySecret('short', 'much-longer-value')).toBe(false);
+  });
+});
+
+describe('safeEqual', () => {
+  it('returns true for equal strings', () => {
+    expect(safeEqual('abc', 'abc')).toBe(true);
+  });
+
+  it('returns false for different strings of same length', () => {
+    expect(safeEqual('abc', 'abd')).toBe(false);
+  });
+
+  it('returns false for different length strings', () => {
+    expect(safeEqual('abc', 'ab')).toBe(false);
+    expect(safeEqual('ab', 'abc')).toBe(false);
+  });
+});
+
+describe('createCertnClient', () => {
+  it('returns a CertnClient instance', () => {
+    const client = createCertnClient({
+      baseUrl: BASE_URL,
+      apiKey: 'certn-api-key',
+      webhookSecret: WEBHOOK_SECRET,
+    });
+    expect(client).toBeInstanceOf(CertnClient);
+  });
+});
+
+describe('CertnClient – final mutation-killing tests', () => {
+  it('parseWebhook skips the first header when the key does not match', async () => {
+    const rawBody = JSON.stringify({
+      event_id: 'event-1',
+      event_type: 'CASE_REPORT_READY',
+      object_id: 'case-123',
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => okJson({ id: 'case-123', overall_status: 'COMPLETE', checks: [] }))
+    );
+    const hex = signature(rawBody);
+    const result = await makeClient().parseWebhook(
+      JSON.parse(rawBody),
+      { 'Other-Header': 'garbage', 'x-signature': hex },
+      rawBody
+    );
+    expect(result).toMatchObject({ status: 'completed' });
+  });
+
+  it('parseWebhook drops an empty event_id', async () => {
+    const rawBody = JSON.stringify({
+      event_id: '',
+      event_type: 'CASE_REPORT_READY',
+      object_id: 'case-123',
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => okJson({ id: 'case-123', overall_status: 'COMPLETE', checks: [] }))
+    );
+    const hex = signature(rawBody);
+    const result = await makeClient().parseWebhook(
+      JSON.parse(rawBody),
+      { 'X-Signature': hex },
+      rawBody
+    );
+    expect(result.eventId).toBeUndefined();
+  });
+
+  it('verifyWebhook accepts a valid signature', () => {
+    const rawBody = 'test-body';
+    const hmac = createHmac('sha256', WEBHOOK_SECRET).update(rawBody).digest('hex');
+    expect(makeClient().verifyWebhook(hmac, rawBody)).toBe(true);
+  });
+
+  it('verifyWebhook rejects an invalid signature', () => {
+    expect(makeClient().verifyWebhook('wrong', 'test-body')).toBe(false);
+  });
+
+  it('fetchReport ignores a non-array checks value', async () => {
+    const raw = {
+      id: 'case-123',
+      created: '2026-08-21T10:00:00Z',
+      overall_status: 'COMPLETE',
+      checks: 'not-an-array',
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => okJson(raw)));
+    const report = await makeClient().fetchReport('case-123');
+    expect(report.reportJsonb.checks).toEqual([]);
+  });
+
+  it('fetchReport treats a whitespace-only credit_score as null', async () => {
+    const raw = {
+      id: 'case-123',
+      created: '2026-08-21T10:00:00Z',
+      overall_status: 'COMPLETE',
+      checks: [
+        {
+          id: 'c1',
+          type: 'CREDIT_REPORT_1',
+          status: 'COMPLETE',
+          output_claims: { credit_score: '   ' },
+        },
+      ],
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => okJson(raw)));
+    const report = await makeClient().fetchReport('case-123');
+    expect(report.creditScore).toBeNull();
+  });
+
+  it('request preserves custom headers and defaults to GET', async () => {
+    const client = makeClient();
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      expect(init?.headers).toMatchObject({ 'X-Custom': 'custom-value' });
+      return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(
+      (client as any).request('/api/public/cases/404', { headers: { 'X-Custom': 'custom-value' } })
+    ).rejects.toThrow('Certn request failed: GET /api/public/cases/404: HTTP 404');
+  });
+
+});
+
+describe('createCertnConfigFromEnv – value preservation', () => {
+  it('preserves a non-empty CERTN_GROUP', () => {
+    process.env.CERTN_API_KEY = 'api-key';
+    process.env.CERTN_WEBHOOK_SECRET = 'webhook-secret';
+    process.env.CERTN_GROUP = 'finance';
+    const config = createCertnConfigFromEnv();
+    expect(config.group).toBe('finance');
+  });
+
+  it('preserves a non-empty CERTN_APPLICANT_LANGUAGE', () => {
+    process.env.CERTN_API_KEY = 'api-key';
+    process.env.CERTN_WEBHOOK_SECRET = 'webhook-secret';
+    process.env.CERTN_APPLICANT_LANGUAGE = 'fr-CA';
+    const config = createCertnConfigFromEnv();
+    expect(config.applicantLanguage).toBe('fr-CA');
   });
 });
