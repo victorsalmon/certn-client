@@ -23,6 +23,8 @@ export interface ScreeningProfile {
   readonly label: string;
 }
 
+export const DEFAULT_PROFILE_NAME = 'identity';
+
 export const SCREENING_PROFILES: readonly ScreeningProfile[] = [
   {
     name: 'identity',
@@ -59,6 +61,8 @@ export const SCREENING_PROFILES: readonly ScreeningProfile[] = [
   },
 ];
 
+const ALLOWED_PROFILE_NAMES = SCREENING_PROFILES.map((p) => p.name).join(', ');
+
 const PROFILE_BY_NAME: ReadonlyMap<string, ScreeningProfile> = new Map(
   SCREENING_PROFILES.map((profile) => [profile.name, profile])
 );
@@ -68,7 +72,7 @@ export function getScreeningProfile(name: string): ScreeningProfile {
   const profile = PROFILE_BY_NAME.get(name);
   if (!profile) {
     throw new Error(
-      `Unknown screening profile: ${name}. Allowed: ${SCREENING_PROFILES.map((p) => p.name).join(', ')}`
+      `Unknown screening profile: ${name}. Allowed: ${ALLOWED_PROFILE_NAMES}`
     );
   }
   return profile;

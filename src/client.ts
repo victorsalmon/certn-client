@@ -21,7 +21,7 @@ import type {
 } from './types.js';
 import { CertnWebhookSignatureError } from './types.js';
 import { safeEqual } from './util.js';
-import { getScreeningProfile } from './profiles.js';
+import { DEFAULT_PROFILE_NAME, getScreeningProfile } from './profiles.js';
 import type { CertnClientConfig } from './config.js';
 
 type JsonObject = Record<string, unknown>;
@@ -63,6 +63,30 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Certn API protocol constants. Keeping them as named values makes it easier to
+// see which literals are domain tokens and prevents drift if the API changes.
+const CERTN_API_KEY_PREFIX = 'Api-Key ';
+const PDF_REPORT_LANGUAGE = 'en-CA';
+const MAX_PDF_POLL_ATTEMPTS = 10;
+const PDF_POLL_BACKOFF_MS = 750;
+
+const CASE_STATUS_COMPLETE = 'COMPLETE';
+const CASE_STATUS_FAILED = 'FAILED';
+const CASE_STATUS_CANCELLED = 'CANCELLED';
+const CASE_STATUS_CLIENT_ACTION_REQUIRED = 'CLIENT_ACTION_REQUIRED';
+const CASE_STATUS_APPLICANT_ACTION_REQUIRED = 'APPLICANT_ACTION_REQUIRED';
+
+const WEBHOOK_EVENT_CASE_REPORT_READY = 'CASE_REPORT_READY';
+const WEBHOOK_EVENT_CASE_STATUS_CHANGED = 'CASE_STATUS_CHANGED';
+
+const IDENTITY_SCORE_CLEAR = 'CLEAR';
+const IDENTITY_SUB_SCORE_VERIFIED = 'VERIFIED';
+
+const CREDIT_CHECK_TYPE_KEYWORD = 'CREDIT';
+const IDENTITY_CHECK_TYPE_KEYWORD = 'IDENTITY';
+
+const SHA256_SIGNATURE_PREFIX_PATTERN = /^sha256=/i;
+
 export class CertnClient {
   private readonly baseUrl: string;
 
@@ -82,7 +106,7 @@ export class CertnClient {
     profileName?: string,
     _applicantName?: string
   ): Promise<ScreeningInvitation> {
-    const profile = getScreeningProfile(profileName ?? this.config.profileName ?? 'identity');
+    const profile = getScreeningProfile(profileName ?? this.config.profileName ?? DEFAULT_PROFILE_NAME);
     const data = await this.request<JsonObject>('/api/public/cases/order/', {
       method: 'POST',
       body: JSON.stringify({
@@ -132,26 +156,26 @@ export class CertnClient {
       `/api/public/cases/${encodeURIComponent(caseId)}/generate-report/`,
       {
         method: 'POST',
-        body: JSON.stringify({ language: 'en-CA' }),
+        body: JSON.stringify({ language: PDF_REPORT_LANGUAGE }),
       }
     );
     const reportFileId = asString(generated.case_report_file_id);
     if (!reportFileId) throw new Error('Certn report response missing case_report_file_id');
 
-    for (let attempt = 0; attempt < 10; attempt++) {
+    for (let attempt = 0; attempt < MAX_PDF_POLL_ATTEMPTS; attempt++) {
       const file = await this.request<JsonObject>(
         `/api/public/cases/report-files/${encodeURIComponent(reportFileId)}/`,
         { method: 'GET' }
       );
       const status = asString(file.status);
-      if (status === 'FAILED') throw new Error('Certn report generation failed');
+      if (status === CASE_STATUS_FAILED) throw new Error('Certn report generation failed');
       const pdfUrl = asString(file.pdf_url);
-      if (status === 'COMPLETE' && pdfUrl) {
+      if (status === CASE_STATUS_COMPLETE && pdfUrl) {
         const response = await fetch(pdfUrl);
         if (!response.ok) throw new Error(`Certn PDF download failed: HTTP ${response.status}`);
         return Buffer.from(await response.arrayBuffer());
       }
-      await delay(750);
+      await delay(PDF_POLL_BACKOFF_MS);
     }
     throw new Error('Certn report PDF did not become available before timeout');
   }
@@ -183,8 +207,8 @@ export class CertnClient {
     // completion signal; COMPLETE is also accepted for integrations that only
     // subscribe to CASE_STATUS_CHANGED.
     const complete =
-      eventType === 'CASE_REPORT_READY' ||
-      (eventType === 'CASE_STATUS_CHANGED' && caseStatus === 'COMPLETE');
+      eventType === WEBHOOK_EVENT_CASE_REPORT_READY ||
+      (eventType === WEBHOOK_EVENT_CASE_STATUS_CHANGED && caseStatus === CASE_STATUS_COMPLETE);
     if (complete) {
       return {
         applicationId: caseId,
@@ -193,7 +217,7 @@ export class CertnClient {
         eventId,
       };
     }
-    if (caseStatus === 'CANCELLED') {
+    if (caseStatus === CASE_STATUS_CANCELLED) {
       return { applicationId: caseId, status: 'error', eventId };
     }
     return {
@@ -201,7 +225,8 @@ export class CertnClient {
       status: 'in_progress',
       eventId,
       actionRequired:
-        caseStatus === 'CLIENT_ACTION_REQUIRED' || caseStatus === 'APPLICANT_ACTION_REQUIRED',
+        caseStatus === CASE_STATUS_CLIENT_ACTION_REQUIRED ||
+        caseStatus === CASE_STATUS_APPLICANT_ACTION_REQUIRED,
     };
   }
 
@@ -212,7 +237,7 @@ export class CertnClient {
 
   private validSignature(signature: string | undefined, rawBody: string): boolean {
     if (!signature || !this.config.webhookSecret) return false;
-    const supplied = signature.replace(/^sha256=/i, '').trim();
+    const supplied = signature.replace(SHA256_SIGNATURE_PREFIX_PATTERN, '').trim();
     const digest = createHmac('sha256', this.config.webhookSecret).update(rawBody).digest();
     const expectedHex = digest.toString('hex');
     const expectedBase64 = digest.toString('base64');
@@ -226,7 +251,7 @@ export class CertnClient {
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
-        Authorization: `Api-Key ${this.config.apiKey}`,
+        Authorization: `${CERTN_API_KEY_PREFIX}${this.config.apiKey}`,
         ...(init.headers ?? {}),
       },
     });
@@ -288,7 +313,8 @@ export class CertnClient {
           : firstBoolean(
               identityCheck.id_verified,
               identityCheck.idVerified,
-              identityScore === 'CLEAR' || identitySubScore === 'VERIFIED'
+              identityScore === IDENTITY_SCORE_CLEAR ||
+              identitySubScore === IDENTITY_SUB_SCORE_VERIFIED
             ),
       reportJsonb,
       completedAt: asString(data.modified) ?? asString(data.created) ?? new Date().toISOString(),

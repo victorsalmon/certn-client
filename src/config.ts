@@ -10,6 +10,8 @@
  * surfaces must not be used.
  */
 
+import { DEFAULT_PROFILE_NAME } from './profiles.js';
+
 export interface CertnClientConfig {
   baseUrl: string;
   apiKey: string;
@@ -25,6 +27,9 @@ export interface CertnClientConfig {
 
 export const CERTN_SANDBOX_BASE_URL = 'https://api.sandbox.certn.co';
 export const CERTN_PRODUCTION_BASE_URL = 'https://api.ca.certn.co';
+
+/** Environment name that selects the Certn production base URL. */
+const CERTN_PRODUCTION_ENVIRONMENT = 'production';
 
 /**
  * Build a {@link CertnClientConfig} from environment variables.
@@ -47,13 +52,15 @@ export function createCertnConfigFromEnv(env: NodeJS.ProcessEnv = process.env): 
 
   const baseUrl =
     env.CERTN_BASE_URL ??
-    (env.CERTN_ENVIRONMENT === 'production' ? CERTN_PRODUCTION_BASE_URL : CERTN_SANDBOX_BASE_URL);
+    (env.CERTN_ENVIRONMENT === CERTN_PRODUCTION_ENVIRONMENT
+      ? CERTN_PRODUCTION_BASE_URL
+      : CERTN_SANDBOX_BASE_URL);
 
   return {
     baseUrl,
     apiKey,
     webhookSecret,
-    profileName: env.CERTN_PROFILE ?? 'identity',
+    profileName: env.CERTN_PROFILE ?? DEFAULT_PROFILE_NAME,
     group: env.CERTN_GROUP || undefined,
     tags: parseTags(env.CERTN_TAGS),
     applicantLanguage: env.CERTN_APPLICANT_LANGUAGE || undefined,
