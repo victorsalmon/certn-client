@@ -27,6 +27,9 @@
     "client"
   ],
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {

@@ -22,3 +22,7 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm test
+      # Dependency audit gate: fails on HIGH-or-worse vulnerabilities.
+      # Re-run locally with: npm audit --omit=dev --audit-level=high
+      # (after upgrades, re-run; fix with `npm audit fix` then re-run the audit).
+      - run: npm audit --omit=dev --audit-level=high
