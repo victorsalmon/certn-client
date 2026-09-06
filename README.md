@@ -1,9 +1,11 @@
 # certn-client
 
+[![CI](https://github.com/victorsalmon/certn-client/actions/workflows/ci.yml/badge.svg)](https://github.com/victorsalmon/certn-client/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/@clocklobster/certn-client.svg)](https://www.npmjs.com/package/@clocklobster/certn-client)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
-[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18-green.svg)](https://nodejs.org/)
-[![Tests](https://img.shields.io/badge/tests-40%20passing-brightgreen.svg)](#testing)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22-green.svg)](https://nodejs.org/)
+[![Tests](https://img.shields.io/badge/tests-89%20passing-brightgreen.svg)](#testing)
 
 A product-neutral TypeScript client for the [Certn Centric](https://certn.co) screening API —
 case ordering, report fetch, PDF retrieval, and X-Signature webhook verification.
@@ -83,7 +85,7 @@ npm install @clocklobster/certn-client
 pnpm add @clocklobster/certn-client
 ```
 
-The package ships ESM + TypeScript declarations. Node.js ≥ 18 (uses global `fetch`).
+The package ships ESM + TypeScript declarations. Node.js ≥ 22 (uses global `fetch`).
 
 ## Quick start
 
@@ -309,11 +311,12 @@ additional PII filtering.
 ## Testing
 
 ```bash
-npm test           # vitest — 40 tests
+npm test               # vitest — 89 tests
 npm run test:mutation  # stryker mutation testing
 ```
 
-All tests use mocked `fetch` — no network calls. The suite covers:
+All 89 tests run offline with mocked `fetch` — no network calls and no live
+Certn credentials required. The suite covers:
 
 - Case ordering with each allow-listed profile
 - Report normalization (credit score, identity verification, PII stripping)
@@ -325,6 +328,13 @@ All tests use mocked `fetch` — no network calls. The suite covers:
 - Error propagation (4xx/429/5xx)
 - Config-from-env (sandbox/production fallback, tags parsing, missing values)
 
+Offline vs credentialed runs: the default `npm test` suite is fully offline
+(mocked `fetch`, no `CERTN_*` credentials needed). The suite never hits the
+live Certn API; to exercise the client against sandbox/production manually,
+set `CERTN_API_KEY` / `CERTN_WEBHOOK_SECRET` (see [Configuration](#configuration))
+and drive `examples/quickstart.ts` — no automated credentialed test target is
+included.
+
 ## Development
 
 ```bash
@@ -332,6 +342,7 @@ npm install
 npm run typecheck
 npm test
 npm run build
+npm audit --omit=dev --audit-level=high  # dependency audit (CI gate; fails on HIGH-or-worse; re-run after upgrades or `npm audit fix`)
 ```
 
 ## Project layout
