@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22-green.svg)](https://nodejs.org/)
-[![Tests](https://img.shields.io/badge/tests-89%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-105%20passing-brightgreen.svg)](#testing)
 
 A product-neutral TypeScript client for the [Certn Centric](https://certn.co) screening API —
 case ordering, report fetch, PDF retrieval, and X-Signature webhook verification.
@@ -74,7 +74,18 @@ The client targets the **current Certn Centric API only** — `Authorization: Ap
   with optional `sha256=` prefix; fails closed on empty secrets
 - **PII stripping** — `fetchReport` returns only normalized outcomes + check metadata;
   `input_claims`, `output_claims`, email addresses, and identity documents are never persisted
-- **Polling with backoff** — `fetchPdf` polls the report-file endpoint (750ms, up to 10 attempts)
+- **Request resilience** — every provider `fetch` aborts after a documented default
+  timeout (15 s API, 30 s PDF download), overridable via `requestTimeoutMs` /
+  `pdfDownloadTimeoutMs`
+- **Bounded retry** — `invite` / `fetchReport` retry once after a bounded delay
+  (default 500 ms via `retryDelayMs`) on HTTP 429/5xx; other 4xx and
+  webhook-signature failures never retry
+- **Pre-flight validation** — `invite()` rejects empty/malformed `applicantEmail`
+  and `fetchReport` / `fetchPdf` / `cancelCase` reject empty/whitespace `caseId`
+  before any network call
+- **Null-honest timestamps** — `completedAt` is `string | null` (never fabricated);
+  `evictionCount` is always `null` meaning "not measured by this client"
+- **Polling with fixed interval** — `fetchPdf` polls the report-file endpoint (750ms, up to 10 attempts)
 - **Product-neutral** — no application-specific coupling; consuming apps map the results into
   their own domain models
 
@@ -120,6 +131,9 @@ const config: CertnClientConfig = {
   group: 'your-case-group',          // optional
   tags: ['tenant-screening'],        // optional
   applicantLanguage: 'en-CA',        // optional
+  requestTimeoutMs: 15_000,          // optional; default 15 s for API requests
+  pdfDownloadTimeoutMs: 30_000,      // optional; default 30 s for PDF download
+  retryDelayMs: 500,                 // optional; default 500 ms single 429/5xx retry delay
 };
 
 const client = createCertnClient(config);
@@ -172,6 +186,10 @@ the configured `profileName` and must be in the allow-list (`identity`, `credit`
 `risk`). Returns the Certn case id (`purchaseToken`) and the applicant-facing
 invite link (`secureLink`).
 
+Throws before any network call on an empty/malformed `applicantEmail`.
+Retries once after `retryDelayMs` on HTTP 429/5xx; other 4xx fail fast.
+Every attempt aborts after `requestTimeoutMs` (default 15 s).
+
 ### Fetch a report — `fetchReport(caseId)`
 
 ```ts
@@ -182,6 +200,13 @@ Fetches the case via `GET /api/public/cases/{id}` and normalizes it into a
 `ScreeningReport` (credit score, identity verification, check metadata). PII
 (input_claims, output_claims, emails, document numbers) is stripped — see
 [PII stripping](#pii-stripping).
+
+Throws before any network call on an empty/whitespace `caseId`. Retries once
+after `retryDelayMs` on HTTP 429/5xx; other 4xx fail fast. Every attempt aborts
+after `requestTimeoutMs` (default 15 s). `completedAt` is `string | null`
+(`null` when the provider supplies neither `modified` nor `created` — never
+fabricated); `evictionCount` is always `null` meaning "not measured by this
+client".
 
 ### Fetch the PDF — `fetchPdf(caseId)`
 
@@ -194,6 +219,10 @@ Calls `POST /api/public/cases/{id}/generate-report/`, then polls
 `status === 'COMPLETE'`, then downloads the signed `pdf_url`. Returns the PDF
 bytes as a `Buffer`.
 
+Throws before any network call on an empty/whitespace `caseId`. API calls abort
+after `requestTimeoutMs` (default 15 s); the PDF download aborts after
+`pdfDownloadTimeoutMs` (default 30 s).
+
 ### Cancel a case — `cancelCase(caseId)`
 
 ```ts
@@ -201,6 +230,8 @@ await client.cancelCase('case-123');
 ```
 
 Calls `POST /api/public/cases/{id}/cancel/`.
+
+Throws before any network call on an empty/whitespace `caseId`.
 
 ### Verify a webhook — `parseWebhook(payload, headers, rawBody?)`
 
@@ -248,6 +279,15 @@ bump the profile `version` and update `checkTypesWithArguments`. The retired
 ## Error handling
 
 - **HTTP errors** — non-2xx responses throw `Error('Certn request failed: <METHOD> <path>: HTTP <status>')`.
+- **Timeouts** — every API request aborts after `requestTimeoutMs` (default 15 s)
+  and the PDF download after `pdfDownloadTimeoutMs` (default 30 s), throwing
+  `Error('Certn request timed out: <label> after <ms>ms')`. Timeouts are never retried.
+- **Bounded retry** — `invite` / `fetchReport` retry once after `retryDelayMs`
+  (default 500 ms) on HTTP 429/5xx; other 4xx, timeouts, network errors, and
+  webhook-signature failures are never retried.
+- **Input validation** — `Error('Invalid applicant email: expected a non-empty email address')`
+  and `Error('Invalid case id: expected a non-empty case id')` throw before any
+  network call.
 - **Webhook signature errors** — `CertnWebhookSignatureError` with `statusCode: 401`.
 - **Missing fields** — `Error('Certn order response missing id/invite_link')` or
   `Error('Certn report response missing case_report_file_id')`.
@@ -329,21 +369,19 @@ Field semantics for retention logic:
 - `evictionCount` is always `null`, which means **not measured** — this client
   never sources eviction data. `null` must not be stored, displayed, or
   reasoned about as `0` evictions.
-- `completedAt` is typed as a non-nullable ISO-8601 `string`. It is derived
-  from the upstream `modified` timestamp, falling back to `created` and then to
-  the fetch time, so it is never `null` — but a fallback value is synthetic
-  (fetch time), not Certn's authoritative completion time. Consumers that need
-  to distinguish "authoritative" from "synthetic" timestamps must capture that
-  distinction themselves at fetch time.
+- `completedAt` is `string | null` (never fabricated). It is derived from the
+  upstream `modified` timestamp, falling back to `created`, and is `null` when
+  the provider supplies neither. Consumers must treat `null` as "completion
+  time unknown", not as "just completed".
 
 ## Testing
 
 ```bash
-npm test               # vitest — 89 tests
+npm test               # vitest — 105 tests
 npm run test:mutation  # stryker mutation testing
 ```
 
-All 89 tests run offline with mocked `fetch` — no network calls and no live
+All 105 tests run offline with mocked `fetch` — no network calls and no live
 Certn credentials required. The suite covers:
 
 - Case ordering with each allow-listed profile
@@ -353,7 +391,8 @@ Certn credentials required. The suite covers:
   tampered digests, empty secrets)
 - Webhook event mapping (CASE_REPORT_READY, CASE_STATUS_CHANGED, CANCELLED,
   action-required, missing object_id)
-- Error propagation (4xx/429/5xx)
+- Error propagation (4xx fail-fast, 429/5xx single retry, timeout abort,
+  email/caseId pre-validation, null-timestamp path)
 - Config-from-env (sandbox/production fallback, tags parsing, missing values)
 
 Offline vs credentialed runs: the default `npm test` suite is fully offline

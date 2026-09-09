@@ -16,6 +16,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Request resilience: every provider `fetch` aborts after a documented default
+  timeout (15 s API via `requestTimeoutMs`, 30 s PDF download via
+  `pdfDownloadTimeoutMs`), overridable via client config; `invite`/`fetchReport`
+  retry once after a bounded delay (`retryDelayMs`, default 500 ms) on HTTP
+  429/5xx with no retry on other 4xx or webhook-signature failures.
+- Pre-flight validation: `invite()` rejects empty/malformed `applicantEmail` and
+  `fetchReport`/`fetchPdf`/`cancelCase` reject empty/whitespace `caseId` before
+  any network call.
+- Null-honest report typing: `completedAt` is `string | null` (`null` when the
+  provider supplies neither `modified` nor `created`, never fabricated) and
+  `evictionCount: null` is documented in code + TSDoc as "not measured by this
+  client". README Configuration, Error handling, API reference, and Data
+  retention synced; test suite now 105 passing.
 - README "Data retention" subsection (persistable artifacts, minimization /
   deletion duties, `evictionCount: null` = not measured, `completedAt`
   non-null fallback semantics) and a dependency-audit note with owner +
