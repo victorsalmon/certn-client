@@ -20,18 +20,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   deletion duties, `evictionCount: null` = not measured, `completedAt`
   non-null fallback semantics) and a dependency-audit note with owner +
   upgrade triggers.
+- Storefront polish: truthful README badges (CI status, npm version,
+  Node >= 22, 89 passing tests), CI dependency-audit gate
+  (`npm audit --omit=dev --audit-level=high`), and `engines` metadata
+  (`node >= 22`).
 
 ### Fixed
 
 - Corrected PDF polling description: `fetchPdf` polls the report-file endpoint
   on a fixed 750 ms interval, up to 10 attempts (not exponential backoff).
-
-### Added
-
-- Storefront polish: truthful README badges (CI status, npm version,
-  Node >= 22, 89 passing tests), CI dependency-audit gate
-  (`npm audit --omit=dev --audit-level=high`), and `engines` metadata
-  (`node >= 22`).
 
 ## [1.0.0] - 2026-08-21
 
