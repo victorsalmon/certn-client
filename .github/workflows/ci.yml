@@ -19,6 +19,12 @@ jobs:
           cache: npm
 
       - run: npm ci
+      - name: Dependency audit (fails on HIGH-or-worse)
+        # Re-run locally: `npm audit --omit=dev --audit-level=high` (prod tree)
+        # and `npm audit --audit-level=high` (full tree). Fix with `npm audit fix`.
+        run: |
+          npm audit --omit=dev --audit-level=high
+          npm audit --audit-level=high
       - run: npm run typecheck
       - run: npm run build
       - run: npm test

@@ -1,9 +1,11 @@
 # certn-client
 
+[![CI](https://github.com/victorsalmon/certn-client/actions/workflows/ci.yml/badge.svg)](https://github.com/victorsalmon/certn-client/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/@clocklobster/certn-client.svg)](https://www.npmjs.com/package/@clocklobster/certn-client)
+[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22-green.svg)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-7.x-blue.svg)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
-[![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18-green.svg)](https://nodejs.org/)
-[![Tests](https://img.shields.io/badge/tests-40%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-97%20passing-brightgreen.svg)](#testing)
 
 A product-neutral TypeScript client for the [Certn Centric](https://certn.co) screening API —
 case ordering, report fetch, PDF retrieval, and X-Signature webhook verification.
@@ -35,6 +37,7 @@ case ordering, report fetch, PDF retrieval, and X-Signature webhook verification
 - [Error handling](#error-handling)
 - [Webhooks](#webhooks)
 - [PII stripping](#pii-stripping)
+- [Data retention](#data-retention)
 - [Testing](#testing)
 - [Development](#development)
 - [Project layout](#project-layout)
@@ -71,7 +74,7 @@ The client targets the **current Certn Centric API only** — `Authorization: Ap
   with optional `sha256=` prefix; fails closed on empty secrets
 - **PII stripping** — `fetchReport` returns only normalized outcomes + check metadata;
   `input_claims`, `output_claims`, email addresses, and identity documents are never persisted
-- **Polling with backoff** — `fetchPdf` polls the report-file endpoint (750ms, up to 10 attempts)
+- **Polling with a fixed interval** — `fetchPdf` polls the report-file endpoint every 750ms (up to 10 attempts)
 - **Product-neutral** — no application-specific coupling; consuming apps map the results into
   their own domain models
 
@@ -83,7 +86,7 @@ npm install @clocklobster/certn-client
 pnpm add @clocklobster/certn-client
 ```
 
-The package ships ESM + TypeScript declarations. Node.js ≥ 18 (uses global `fetch`).
+The package ships ESM + TypeScript declarations. Node.js ≥ 22 (see `.nvmrc`; uses global `fetch`).
 
 ## Quick start
 
@@ -117,10 +120,24 @@ const config: CertnClientConfig = {
   group: 'your-case-group',          // optional
   tags: ['tenant-screening'],        // optional
   applicantLanguage: 'en-CA',        // optional
+  requestTimeoutMs: 15000,           // optional; per-attempt API timeout (default 15000)
+  pdfDownloadTimeoutMs: 30000,       // optional; signed PDF download timeout (default 30000)
+  retryDelayMs: 500,                 // optional; delay before the single 429/5xx retry (default 500)
 };
 
 const client = createCertnClient(config);
 ```
+
+### Timeouts and retries
+
+Every Certn API call (order, detail, cancel, generate-report, report-file
+poll) aborts after `requestTimeoutMs` (default 15 s) and throws
+`Error('Certn request timed out: <METHOD> <path> after <ms>ms')`. The signed
+PDF download aborts after `pdfDownloadTimeoutMs` (default 30 s).
+
+`invite` and `fetchReport` retry **once**, after `retryDelayMs` (default
+500 ms), on HTTP 429 or 5xx. Other 4xx responses, timeouts, network errors,
+and webhook-signature failures are never retried.
 
 ### From environment variables
 
@@ -187,9 +204,9 @@ const pdf = await client.fetchPdf('case-123');
 ```
 
 Calls `POST /api/public/cases/{id}/generate-report/`, then polls
-`GET /api/public/cases/report-files/{id}/` every 750ms (up to 10 attempts) until
-`status === 'COMPLETE'`, then downloads the signed `pdf_url`. Returns the PDF
-bytes as a `Buffer`.
+`GET /api/public/cases/report-files/{id}/` every 750ms (fixed interval, up to
+10 attempts) until `status === 'COMPLETE'`, then downloads the signed `pdf_url`.
+Returns the PDF bytes as a `Buffer`.
 
 ### Cancel a case — `cancelCase(caseId)`
 
@@ -245,6 +262,12 @@ bump the profile `version` and update `checkTypesWithArguments`. The retired
 ## Error handling
 
 - **HTTP errors** — non-2xx responses throw `Error('Certn request failed: <METHOD> <path>: HTTP <status>')`.
+  `invite`/`fetchReport` retry once on 429/5xx before throwing; other 4xx fail fast.
+- **Timeouts** — requests that exceed `requestTimeoutMs` (PDF download:
+  `pdfDownloadTimeoutMs`) throw `Error('Certn request timed out: <METHOD> <path> after <ms>ms')`.
+- **Input validation** — `invite` throws `Error('Invalid applicant email: ...')`
+  on an empty/malformed email before any network call; `fetchReport`/`fetchPdf`/
+  `cancelCase` throw `Error('Invalid case id: ...')` on an empty/whitespace case id.
 - **Webhook signature errors** — `CertnWebhookSignatureError` with `statusCode: 401`.
 - **Missing fields** — `Error('Certn order response missing id/invite_link')` or
   `Error('Certn report response missing case_report_file_id')`.
@@ -306,14 +329,31 @@ no-ops.
 are **never** included. Consuming apps can safely persist `reportJsonb` without
 additional PII filtering.
 
+## Data retention
+
+Consumers may persist the PII-stripped `reportJsonb` and the downloaded PDF
+bytes. They must still minimize what they keep (store only the reports and
+statuses the tenancy decision needs) and delete them when the business purpose
+ends or the applicant requests deletion, per applicable privacy law.
+
+Field semantics for retention decisions:
+
+- `evictionCount` is always `null` — eviction outcomes are **not measured** by
+  this client (`null` means "not measured", never "zero evictions").
+- `completedAt` is `string | null` — the provider `modified` timestamp
+  (fallback: `created`), or `null` when the provider supplies neither. The
+  client never fabricates a timestamp.
+
 ## Testing
 
 ```bash
-npm test           # vitest — 40 tests
+npm test           # vitest — 97 tests
 npm run test:mutation  # stryker mutation testing
 ```
 
-All tests use mocked `fetch` — no network calls. The suite covers:
+All tests run **offline** with mocked `fetch` — no network calls and no
+credentials needed. Credentialed runs against the Certn sandbox (real API key
++ network) are manual only; they are not part of the suite. The suite covers:
 
 - Case ordering with each allow-listed profile
 - Report normalization (credit score, identity verification, PII stripping)
@@ -322,7 +362,9 @@ All tests use mocked `fetch` — no network calls. The suite covers:
   tampered digests, empty secrets)
 - Webhook event mapping (CASE_REPORT_READY, CASE_STATUS_CHANGED, CANCELLED,
   action-required, missing object_id)
-- Error propagation (4xx/429/5xx)
+- Error propagation (4xx/429/5xx, single retry on 429/5xx, request timeouts)
+- Input validation (malformed applicant email, empty/whitespace case id)
+- Null-timestamp path (`completedAt: null` when the provider omits timestamps)
 - Config-from-env (sandbox/production fallback, tags parsing, missing values)
 
 ## Development
@@ -370,6 +412,16 @@ All paths are relative to the configured `baseUrl` (sandbox or production).
   email addresses, or identity documents.
 - **API key in transit only** — the `apiKey` is sent only as an `Authorization`
   header to the Certn API; it is never logged or persisted by the client.
+- **Dependency audit** — CI fails on HIGH-or-worse advisories in both the prod
+  tree (`npm audit --omit=dev --audit-level=high`) and the full tree
+  (`npm audit --audit-level=high`); re-run either command locally and fix with
+  `npm audit fix`. The prod tree is clean. Two remaining MODERATE advisories
+  (qs DoS/array-limit: GHSA-q8mj-m7cp-5q26, GHSA-x5fp-wj9c-mxmx,
+  GHSA-4mjr-xmp4-gh2g) arrive via `typed-rest-client@2.3.1` ←
+  `@stryker-mutator/core` (dev-only, mutation testing — not shipped).
+  Owner: maintainers on the next `@stryker-mutator/core` upgrade; upgrade
+  trigger: a stryker release that moves off `typed-rest-client` 2.x /
+  `qs` < 6.16.0 (fixed in `qs@6.16.0`).
 
 ## Contributing
 
