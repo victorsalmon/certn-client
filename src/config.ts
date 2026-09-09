@@ -23,7 +23,32 @@ export interface CertnClientConfig {
   group?: string;
   tags?: string[];
   applicantLanguage?: string;
+  /**
+   * Default timeout in milliseconds for Certn API requests
+   * (order, detail, cancel, generate-report, report-file poll).
+   * Defaults to {@link DEFAULT_REQUEST_TIMEOUT_MS}. Must be positive.
+   */
+  requestTimeoutMs?: number;
+  /**
+   * Timeout in milliseconds for the signed PDF download.
+   * Defaults to {@link DEFAULT_PDF_DOWNLOAD_TIMEOUT_MS}. Must be positive.
+   */
+  pdfDownloadTimeoutMs?: number;
+  /**
+   * Delay in milliseconds before the single retry on HTTP 429/5xx.
+   * Defaults to {@link DEFAULT_RETRY_DELAY_MS}. Must be non-negative.
+   */
+  retryDelayMs?: number;
 }
+
+/** Default timeout for Certn API requests (15 s). */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
+
+/** Default timeout for the signed PDF download (30 s). */
+export const DEFAULT_PDF_DOWNLOAD_TIMEOUT_MS = 30_000;
+
+/** Default delay before the single retry on HTTP 429/5xx (500 ms). */
+export const DEFAULT_RETRY_DELAY_MS = 500;
 
 export const CERTN_SANDBOX_BASE_URL = 'https://api.sandbox.certn.co';
 export const CERTN_PRODUCTION_BASE_URL = 'https://api.ca.certn.co';

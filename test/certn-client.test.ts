@@ -1284,3 +1284,143 @@ describe('createCertnConfigFromEnv – value preservation', () => {
     expect(config.applicantLanguage).toBe('fr-CA');
   });
 });
+
+describe('CertnClient – request resilience', () => {
+  it('aborts API requests after the configured requestTimeoutMs', async () => {
+    const slowFetch = vi.fn(async (_url: string, init?: RequestInit) => {
+      const signal = init?.signal as AbortSignal | undefined;
+      expect(signal).toBeInstanceOf(AbortSignal);
+      // Behave like real fetch: reject when the timeout signal aborts.
+      await new Promise<never>((_resolve, reject) => {
+        if (signal?.aborted) {
+          reject(new DOMException('The operation timed out', 'TimeoutError'));
+          return;
+        }
+        signal?.addEventListener(
+          'abort',
+          () => reject(new DOMException('The operation timed out', 'TimeoutError')),
+          { once: true }
+        );
+      });
+      throw new Error('unreachable');
+    });
+    vi.stubGlobal('fetch', slowFetch);
+    const client = new CertnClient({
+      baseUrl: BASE_URL,
+      apiKey: 'certn-api-key',
+      webhookSecret: WEBHOOK_SECRET,
+      requestTimeoutMs: 20,
+    });
+    await expect(client.fetchReport('case-123')).rejects.toThrow(
+      'Certn request timed out: GET /api/public/cases/case-123 after 20ms'
+    );
+    // Timeouts are never retried.
+    expect(slowFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('aborts the PDF download after the configured pdfDownloadTimeoutMs', async () => {
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).endsWith('/generate-report/'))
+        return okJson({ case_report_file_id: 'file-1' }, 201);
+      if (String(url).endsWith('/report-files/file-1/'))
+        return okJson({ status: 'COMPLETE', pdf_url: 'https://signed.certn.test/r.pdf' });
+      const signal = init?.signal as AbortSignal | undefined;
+      await new Promise<never>((_resolve, reject) => {
+        signal?.addEventListener(
+          'abort',
+          () => reject(new DOMException('The operation timed out', 'TimeoutError')),
+          { once: true }
+        );
+      });
+      throw new Error('unreachable');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new CertnClient({
+      baseUrl: BASE_URL,
+      apiKey: 'certn-api-key',
+      webhookSecret: WEBHOOK_SECRET,
+      pdfDownloadTimeoutMs: 20,
+    });
+    await expect(client.fetchPdf('case-123')).rejects.toThrow(
+      'Certn request timed out: GET PDF download after 20ms'
+    );
+  });
+
+  it('retries invite once on HTTP 429 then succeeds', async () => {
+    let calls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        calls++;
+        if (calls === 1)
+          return new Response(JSON.stringify({ type: 'rate-limited' }), { status: 429 });
+        return okJson({ id: 'case-123', invite_link: 'https://invite' }, 201);
+      })
+    );
+    const invite = await makeClient().invite('jane@example.com');
+    expect(invite.purchaseToken).toBe('case-123');
+    expect(calls).toBe(2);
+  });
+
+  it('retries fetchReport once on HTTP 5xx then succeeds', async () => {
+    let calls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        calls++;
+        if (calls === 1)
+          return new Response(JSON.stringify({ type: 'error' }), { status: 503 });
+        return okJson({
+          id: 'case-123',
+          created: '2026-08-21T10:00:00Z',
+          overall_status: 'COMPLETE',
+          checks: [],
+        });
+      })
+    );
+    const report = await makeClient().fetchReport('case-123');
+    expect(report.completedAt).toBe('2026-08-21T10:00:00Z');
+    expect(calls).toBe(2);
+  });
+
+  it('does not retry on 4xx (other than 429) and surfaces the status', async () => {
+    const fetchMock = vi.fn(
+      async () => new Response(JSON.stringify({ type: 'error' }), { status: 400 })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(makeClient().invite('jane@example.com')).rejects.toThrow('HTTP 400');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await expect(makeClient().fetchReport('case-123')).rejects.toThrow('HTTP 400');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects empty/malformed applicantEmail before any network call', async () => {
+    const fetchMock = vi.fn(async () => okJson({ id: 'case-123', invite_link: 'https://invite' }, 201));
+    vi.stubGlobal('fetch', fetchMock);
+    for (const bad of ['', '   ', 'not-an-email', 'missing-at.com', '@missing-local.com']) {
+      await expect(makeClient().invite(bad)).rejects.toThrow('Invalid applicant email');
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects empty/whitespace caseId before any network call', async () => {
+    const fetchMock = vi.fn(async () => okJson({}));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(makeClient().fetchReport('')).rejects.toThrow('Invalid case id');
+    await expect(makeClient().fetchReport('   ')).rejects.toThrow('Invalid case id');
+    await expect(makeClient().fetchPdf('')).rejects.toThrow('Invalid case id');
+    await expect(makeClient().cancelCase('  ')).rejects.toThrow('Invalid case id');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('returns null completedAt (no fabricated timestamp) when the provider supplies neither modified nor created', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => okJson({ id: 'case-123', overall_status: 'COMPLETE', checks: [] }))
+    );
+    const report = await makeClient().fetchReport('case-123');
+    expect(report.completedAt).toBeNull();
+    // evictionCount is documented as "not measured by this client", never zero-filled.
+    expect(report.evictionCount).toBeNull();
+  });
+});
