@@ -37,6 +37,7 @@ case ordering, report fetch, PDF retrieval, and X-Signature webhook verification
 - [Error handling](#error-handling)
 - [Webhooks](#webhooks)
 - [PII stripping](#pii-stripping)
+- [Data retention](#data-retention)
 - [Testing](#testing)
 - [Development](#development)
 - [Project layout](#project-layout)
@@ -308,6 +309,33 @@ no-ops.
 are **never** included. Consuming apps can safely persist `reportJsonb` without
 additional PII filtering.
 
+## Data retention
+
+Consuming apps may persist only two screening artifacts from this client:
+
+- `reportJsonb` (the PII-stripped normalized report from `fetchReport` — see
+  [PII stripping](#pii-stripping));
+- the PDF bytes returned by `fetchPdf`.
+
+Minimization and deletion duties stay with the consumer: store these artifacts
+only for as long as the tenancy decision requires, restrict access to staff who
+need it, and delete them (including backups, where feasible) when the retention
+purpose expires or the applicant requests erasure. Never persist upstream
+payloads (`input_claims`, `output_claims`, emails, identity documents) — the
+client strips them before returning.
+
+Field semantics for retention logic:
+
+- `evictionCount` is always `null`, which means **not measured** — this client
+  never sources eviction data. `null` must not be stored, displayed, or
+  reasoned about as `0` evictions.
+- `completedAt` is typed as a non-nullable ISO-8601 `string`. It is derived
+  from the upstream `modified` timestamp, falling back to `created` and then to
+  the fetch time, so it is never `null` — but a fallback value is synthetic
+  (fetch time), not Certn's authoritative completion time. Consumers that need
+  to distinguish "authoritative" from "synthetic" timestamps must capture that
+  distinction themselves at fetch time.
+
 ## Testing
 
 ```bash
@@ -342,8 +370,25 @@ npm install
 npm run typecheck
 npm test
 npm run build
-npm audit --omit=dev --audit-level=high  # dependency audit (CI gate; fails on HIGH-or-worse; re-run after upgrades or `npm audit fix`)
+npm audit --omit=dev --audit-level=high  # prod-tree audit (CI gate; fails on HIGH-or-worse; re-run after upgrades or `npm audit fix`)
+npm audit --audit-level=high              # full-tree audit incl. dev deps (CI gate; fails on HIGH-or-worse; re-run after upgrades or `npm audit fix`)
 ```
+
+### Dependency audit
+
+Both audit trees are currently clean (`npm audit` and `npm audit --omit=dev`
+report 0 vulnerabilities). Dev-only transitive advisories are pinned out via
+the `overrides` field in `package.json`:
+
+| Advisory | Path | Resolution | Owner | Upgrade trigger |
+| :--- | :--- | :--- | :--- | :--- |
+| `fast-uri` HIGH (GHSA-5jgf-p345-68v8 / GHSA-f65p-4m7j-42xc / GHSA-fph4-wmhf-6fwf / GHSA-jqff-g426-hqxp) | `@stryker-mutator/core` → `ajv` → `fast-uri` (dev-only) | `npm audit fix` → `fast-uri` 3.1.7 | Maintainer | Remove once `ajv`/`@stryker-mutator/core` pull `fast-uri >= 3.1.6` without the fix |
+| `qs` MODERATE (GHSA-q8mj-m7cp-5q26 / GHSA-x5fp-wj9c-mxmx / GHSA-4mjr-xmp4-gh2g) | `@stryker-mutator/core` → `typed-rest-client` → `qs` (dev-only) | `overrides: { "qs": "^6.16.0" }` | Maintainer | Drop the override once the `typed-rest-client` range resolves to `qs >= 6.16.0` on a clean install (or `@stryker-mutator/core` moves off `typed-rest-client@2.x`) |
+
+If a future `npm audit` reports a HIGH-or-worse advisory in either tree, fix
+with `npm audit fix` (or a targeted upgrade/override as above), then re-run
+both audit commands before pushing. Any remaining MODERATE-or-lower advisory
+must be recorded in this table with its owner and upgrade trigger.
 
 ## Project layout
 

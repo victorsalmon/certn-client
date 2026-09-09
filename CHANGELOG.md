@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Full-tree `npm audit` is clean (0 vulnerabilities): `fast-uri` HIGH fixed via
+  `npm audit fix` (-> 3.1.7) and dev-only `qs` MODERATE chain pinned out via a
+  `qs ^6.16.0` override. CI now gates both the prod and full trees on
+  HIGH-or-worse.
+
+### Added
+
+- README "Data retention" subsection (persistable artifacts, minimization /
+  deletion duties, `evictionCount: null` = not measured, `completedAt`
+  non-null fallback semantics) and a dependency-audit note with owner +
+  upgrade triggers.
+
 ### Fixed
 
 - Corrected PDF polling description: `fetchPdf` polls the report-file endpoint
