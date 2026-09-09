@@ -22,6 +22,11 @@ import type {
 import { CertnWebhookSignatureError } from './types.js';
 import { safeEqual } from './util.js';
 import { DEFAULT_PROFILE_NAME, getScreeningProfile } from './profiles.js';
+import {
+  DEFAULT_PDF_DOWNLOAD_TIMEOUT_MS,
+  DEFAULT_REQUEST_TIMEOUT_MS,
+  DEFAULT_RETRY_DELAY_MS,
+} from './config.js';
 import type { CertnClientConfig } from './config.js';
 
 type JsonObject = Record<string, unknown>;
@@ -46,6 +51,25 @@ function getHeaderValueCaseInsensitive(
 /** Treat a value as a plain object; arrays and non-objects become an empty object. */
 function asObject(value: unknown): JsonObject {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as JsonObject) : {};
+}
+
+/** Throw unless `email` is a non-empty, plausibly-shaped email address. */
+function assertValidApplicantEmail(email: string): void {
+  if (typeof email !== 'string' || !/^\S+@\S+\.\S+$/.test(email.trim())) {
+    throw new Error('Invalid applicant email: expected a non-empty email address');
+  }
+}
+
+/** Throw unless `caseId` is a non-empty, non-whitespace string. */
+function assertValidCaseId(caseId: string): void {
+  if (typeof caseId !== 'string' || caseId.trim().length === 0) {
+    throw new Error('Invalid case id: expected a non-empty case id');
+  }
+}
+
+/** True for the statuses the client retries once (HTTP 429 or any 5xx). */
+function isRetryableStatus(status: number): boolean {
+  return status === 429 || status >= 500;
 }
 
 /** Return the first finite number, or the first numeric string coerced to a number. */
@@ -115,7 +139,7 @@ function toReportCheck(check: JsonObject): JsonObject {
 const CERTN_API_KEY_PREFIX = 'Api-Key ';
 const PDF_REPORT_LANGUAGE = 'en-CA';
 const MAX_PDF_POLL_ATTEMPTS = 10;
-const PDF_POLL_BACKOFF_MS = 750;
+const PDF_POLL_INTERVAL_MS = 750;
 
 const CASE_STATUS_COMPLETE = 'COMPLETE';
 const CASE_STATUS_FAILED = 'FAILED';
@@ -151,12 +175,17 @@ export class CertnClient {
    *
    * `_applicantName` is intentionally ignored: Certn's public API does not accept
    * an applicant name in the order payload.
+   *
+   * Throws before any network call on an empty/malformed `applicantEmail`.
+   * Retries once (after a bounded delay) on HTTP 429/5xx; other 4xx fail fast.
+   * Every attempt aborts after `config.requestTimeoutMs` (default 15 s).
    */
   async invite(
     applicantEmail: string,
     profileName?: string,
     _applicantName?: string
   ): Promise<ScreeningInvitation> {
+    assertValidApplicantEmail(applicantEmail);
     const profile = getScreeningProfile(profileName ?? this.config.profileName ?? DEFAULT_PROFILE_NAME);
     const data = await this.request<JsonObject>('/api/public/cases/order/', {
       method: 'POST',
@@ -171,7 +200,7 @@ export class CertnClient {
           ? { applicant_language: this.config.applicantLanguage }
           : {}),
       }),
-    });
+    }, { retry: true });
     const caseId = asString(data.id);
     const inviteLink = asString(data.invite_link);
     if (!caseId || !inviteLink) {
@@ -180,29 +209,43 @@ export class CertnClient {
     return { purchaseToken: caseId, secureLink: inviteLink };
   }
 
-  /** Cancel a Certn case (POST /api/public/cases/{id}/cancel/). */
+  /**
+   * Cancel a Certn case (POST /api/public/cases/{id}/cancel/).
+   * Throws before any network call on an empty/whitespace `caseId`.
+   */
   async cancelCase(caseId: string): Promise<void> {
+    assertValidCaseId(caseId);
     await this.request<JsonObject>(`/api/public/cases/${encodeURIComponent(caseId)}/cancel/`, {
       method: 'POST',
       body: JSON.stringify({}),
     });
   }
 
-  /** Fetch + normalize a case report by case id. */
+  /**
+   * Fetch + normalize a case report by case id.
+   * Throws before any network call on an empty/whitespace `caseId`.
+   * Retries once (after a bounded delay) on HTTP 429/5xx; other 4xx fail fast.
+   */
   async fetchReport(caseId: string): Promise<ScreeningReport> {
+    assertValidCaseId(caseId);
     const data = await this.request<JsonObject>(
       `/api/public/cases/${encodeURIComponent(caseId)}`,
-      { method: 'GET' }
+      { method: 'GET' },
+      { retry: true }
     );
     return this.mapReport(data);
   }
 
   /**
    * Generate + download a case report PDF. Polls the report-file endpoint
-   * (750ms backoff, up to 10 attempts) until COMPLETE, then downloads the
-   * signed `pdf_url`.
+   * every 750ms (fixed interval, up to 10 attempts) until COMPLETE, then
+   * downloads the signed `pdf_url`. Throws before any network call on an
+   * empty/whitespace `caseId`. API calls abort after
+   * `config.requestTimeoutMs` (default 15 s); the PDF download aborts after
+   * `config.pdfDownloadTimeoutMs` (default 30 s).
    */
   async fetchPdf(caseId: string): Promise<Buffer> {
+    assertValidCaseId(caseId);
     const generated = await this.request<JsonObject>(
       `/api/public/cases/${encodeURIComponent(caseId)}/generate-report/`,
       {
@@ -222,11 +265,16 @@ export class CertnClient {
       if (status === CASE_STATUS_FAILED) throw new Error('Certn report generation failed');
       const pdfUrl = asString(file.pdf_url);
       if (status === CASE_STATUS_COMPLETE && pdfUrl) {
-        const response = await fetch(pdfUrl);
+        const response = await this.fetchWithTimeout(
+          pdfUrl,
+          {},
+          this.config.pdfDownloadTimeoutMs ?? DEFAULT_PDF_DOWNLOAD_TIMEOUT_MS,
+          'GET PDF download'
+        );
         if (!response.ok) throw new Error(`Certn PDF download failed: HTTP ${response.status}`);
         return Buffer.from(await response.arrayBuffer());
       }
-      await waitMs(PDF_POLL_BACKOFF_MS);
+      await waitMs(PDF_POLL_INTERVAL_MS);
     }
     throw new Error('Certn report PDF did not become available before timeout');
   }
@@ -295,23 +343,68 @@ export class CertnClient {
     return safeEqual(supplied, expectedHex) || safeEqual(supplied, expectedBase64);
   }
 
-  /** Internal request helper — exported for testing as a private member. */
-  private async request<T>(path: string, init: RequestInit): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      ...init,
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        Authorization: `${CERTN_API_KEY_PREFIX}${this.config.apiKey}`,
-        ...(init.headers ?? {}),
-      },
-    });
-    if (!response.ok) {
+  /**
+   * Internal request helper — exported for testing as a private member.
+   *
+   * Every attempt aborts after `config.requestTimeoutMs` (default 15 s).
+   * When `opts.retry` is set (invite/fetchReport only), a single retry
+   * follows an HTTP 429/5xx after a bounded delay (`config.retryDelayMs`,
+   * default 500 ms). Other 4xx, timeouts, network errors, and
+   * webhook-signature failures are never retried.
+   */
+  private async request<T>(
+    path: string,
+    init: RequestInit,
+    opts: { retry?: boolean } = {}
+  ): Promise<T> {
+    const timeoutMs = this.config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    const retryDelayMs = this.config.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
+    const attempts = opts.retry ? 2 : 1;
+    const url = `${this.baseUrl}${path}`;
+    const headers = {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+      Authorization: `${CERTN_API_KEY_PREFIX}${this.config.apiKey}`,
+      ...(init.headers ?? {}),
+    };
+    for (let attempt = 0; ; attempt++) {
+      const response = await this.fetchWithTimeout(
+        url,
+        { ...init, headers },
+        timeoutMs,
+        `${init.method ?? 'GET'} ${path}`
+      );
+      if (response.ok) return (await response.json()) as T;
+      if (opts.retry && attempt + 1 < attempts && isRetryableStatus(response.status)) {
+        await waitMs(retryDelayMs);
+        continue;
+      }
       throw new Error(
         `Certn request failed: ${init.method ?? 'GET'} ${path}: HTTP ${response.status}`
       );
     }
-    return (await response.json()) as T;
+  }
+
+  /**
+   * `fetch` wrapper that aborts after `timeoutMs` via `AbortSignal.timeout`
+   * and maps the abort to a `Certn request timed out` error. Other fetch
+   * rejections (network errors) propagate unchanged.
+   */
+  private async fetchWithTimeout(
+    url: string,
+    init: RequestInit,
+    timeoutMs: number,
+    label: string
+  ): Promise<Response> {
+    const signal = AbortSignal.timeout(timeoutMs);
+    try {
+      return await fetch(url, { ...init, signal });
+    } catch (err) {
+      if (signal.aborted) {
+        throw new Error(`Certn request timed out: ${label} after ${timeoutMs}ms`);
+      }
+      throw err;
+    }
   }
 
   private mapReport(data: JsonObject): ScreeningReport {
@@ -338,10 +431,12 @@ export class CertnClient {
         creditCheck?.credit_score,
         creditCheck?.creditScore
       ),
+      // Eviction outcomes are not measured by this client — always null.
       evictionCount: null,
       idVerified: normalizeIdentityVerification(identityCheck),
       reportJsonb,
-      completedAt: asString(data.modified) ?? asString(data.created) ?? new Date().toISOString(),
+      // Never fabricate a timestamp: null when the provider supplies neither.
+      completedAt: asString(data.modified) ?? asString(data.created) ?? null,
     };
   }
 }

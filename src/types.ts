@@ -10,11 +10,21 @@
 /** A completed screening report for one applicant. */
 export interface ScreeningReport {
   creditScore: number | null;
+  /**
+   * Always `null`: eviction outcomes are not measured by this client.
+   * The field is kept (rather than removed) for backwards compatibility —
+   * consumers must treat `null` as "not measured", not as "zero evictions".
+   */
   evictionCount: number | null;
   idVerified: boolean | null;
   /** Provider-specific raw payload (PII-stripped — see client.mapReport). */
   reportJsonb: Record<string, unknown>;
-  completedAt: string;
+  /**
+   * Provider `modified` timestamp (fallback: `created`).
+   * `null` when the provider supplies neither — the client never fabricates
+   * a timestamp (no `new Date()` fallback).
+   */
+  completedAt: string | null;
 }
 
 /** Status the client maps a webhook event into. */
