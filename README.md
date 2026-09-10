@@ -3,7 +3,7 @@
 [![CI](https://github.com/victorsalmon/certn-client/actions/workflows/ci.yml/badge.svg)](https://github.com/victorsalmon/certn-client/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/@clocklobster/certn-client.svg)](https://www.npmjs.com/package/@clocklobster/certn-client)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-7.x-blue.svg)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22-green.svg)](https://nodejs.org/)
 [![Tests](https://img.shields.io/badge/tests-105%20passing-brightgreen.svg)](#testing)
 
