@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 2,
+  "decision": "pass",
+  "disposition": "not-applicable",
+  "repository": "C:\\Repos\\Public\\certn-client\\.worktrees\\salmon-portfolio-certn-supplychain-docs",
+  "commit": "809993b638caec891630066e2511899372ce4265",
+  "commands": [
+    {
+      "name": "git diff check",
+      "command": "pwsh -NoProfile -Command \"git diff --check\"",
+      "exitCode": 0,
+      "result": "no output; no whitespace errors"
+    },
+    {
+      "name": "git status clean",
+      "command": "pwsh -NoProfile -Command \"git status --porcelain=v1 --untracked-files=no\"",
+      "exitCode": 0,
+      "result": "empty output; zero tracked modifications (HEAD contains only docs/supply-chain.md)"
+    },
+    {
+      "name": "supply-chain doc claims reproducible",
+      "command": "pwsh -NoProfile -Command \"if ((Get-Content package.json | ConvertFrom-Json).version -ne '1.0.0') { exit 1 }; if ((Get-Content package.json | ConvertFrom-Json).license -ne 'MIT') { exit 1 }; if ((Get-Content package.json | ConvertFrom-Json).name -ne '@clocklobster/certn-client') { exit 1 }; if (((Get-Content .nvmrc -Raw).Trim()) -ne '22') { exit 1 }; if (-not (Test-Path package-lock.json)) { exit 1 }; if ((Select-String -Path test/*.ts -Pattern '^\\s*(it|test)\\(' -AllMatches | Measure-Object | Select-Object -ExpandProperty Count) -ne 97) { exit 1 }; if (-not (Select-String -Path .github/workflows/ci.yml -Pattern 'npm audit --omit=dev --audit-level=high' -SimpleMatch)) { exit 1 }; if (-not (Select-String -Path .github/workflows/ci.yml -Pattern 'npm audit --audit-level=high' -SimpleMatch)) { exit 1 }\"",
+      "exitCode": 0,
+      "result": "all doc claims verified: identity 1.0.0/MIT, .nvmrc 22, lockfile present, 97 it/test cases, both CI audit gates present"
+    },
+    {
+      "name": "no secrets or credentials in doc",
+      "command": "pwsh -NoProfile -Command \"if (Select-String -Path docs/supply-chain.md -Pattern '-----BEGIN|CERTN_API_KEY\\s*=\\s*\\S|api\\.certn\\.|sk-live') { exit 1 }\"",
+      "exitCode": 0,
+      "result": "no matches; doc contains no private-key markers, key assignments, internal hostnames, or live secrets"
+    }
+  ],
+  "behaviorsProven": [
+    "docs/supply-chain.md created as the only HEAD change with no runtime source, test, or credential modifications (git diff --check and git status clean)",
+    "dependency provenance claims reproducible: zero prod dependencies, 5 devDependencies, committed package-lock.json, node >=22 with .nvmrc 22, identity @clocklobster/certn-client 1.0.0 MIT",
+    "SBOM/release-hygiene claims reproducible: 97 offline it/test cases, files dist only, both CI npm audit gates present in .github/workflows/ci.yml",
+    "secure-consumption notes contain no secrets, key assignments, private-key material, or internal hostnames"
+  ],
+  "changedTestFiles": [],
+  "followUps": []
+}
