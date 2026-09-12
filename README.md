@@ -97,7 +97,7 @@ npm install @clocklobster/certn-client
 pnpm add @clocklobster/certn-client
 ```
 
-The package ships ESM + TypeScript declarations. Node.js ≥ 22 (uses global `fetch`).
+The package ships ESM + TypeScript declarations. Node.js ≥ 22 (see `.nvmrc`; uses global `fetch`).
 
 ## Quick start
 
@@ -382,7 +382,9 @@ npm run test:mutation  # stryker mutation testing
 ```
 
 All 105 tests run offline with mocked `fetch` — no network calls and no live
-Certn credentials required. The suite covers:
+Certn credentials required. Credentialed runs against the Certn sandbox (real
+API key + network) are manual only; they are not part of the suite. The suite
+covers:
 
 - Case ordering with each allow-listed profile
 - Report normalization (credit score, identity verification, PII stripping)
