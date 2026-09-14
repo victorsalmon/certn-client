@@ -52,7 +52,7 @@ the command shown next to it.
   `typed-rest-client@2.3.1` ← `@stryker-mutator/core` (mutation testing, not
   shipped); owner and upgrade trigger are recorded in `README.md` Security.
   Re-run either audit command locally and fix with `npm audit fix`.
-- **Test evidence.** The suite is 97 offline tests (mocked `fetch`, no
+- **Test evidence.** The suite is 105 offline tests (mocked `fetch`, no
   network, no credentials). Reproduce the count:
   `Select-String -Path test/*.ts -Pattern '^\s*(it|test)\(' -AllMatches`
   (or `grep -cE '^\s*(it|test)\(' test/*.test.ts`), then `npm test`.

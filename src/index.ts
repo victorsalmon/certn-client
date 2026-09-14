@@ -1,5 +1,3 @@
-// Public surface of the certn-client package.
-
 export { CertnClient, createCertnClient } from './client.js';
 export {
   CertnWebhookSignatureError,

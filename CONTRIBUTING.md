@@ -6,7 +6,7 @@
 npm ci
 ```
 
-Requires Node.js >= 18.
+Requires Node.js >= 22 (see `.nvmrc`).
 
 ## Test
 

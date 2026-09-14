@@ -443,6 +443,14 @@ src/
   util.ts        # constant-time safeEqual / verifySecret
 test/
   certn-client.test.ts
+  qa-request-resilience.test.ts
+examples/
+  invite-and-report.ts
+  quickstart.ts
+docs/
+  API.md
+  RETENTION.md
+  supply-chain.md
 ```
 
 ## Certn endpoint reference

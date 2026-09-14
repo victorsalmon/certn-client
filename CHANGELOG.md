@@ -34,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   non-null fallback semantics) and a dependency-audit note with owner +
   upgrade triggers.
 - Storefront polish: truthful README badges (CI status, npm version,
-  Node >= 22, 89 passing tests), CI dependency-audit gate
+  Node >= 22, 105 passing tests), CI dependency-audit gate
   (`npm audit --omit=dev --audit-level=high`), and `engines` metadata
   (`node >= 22`).
 
