@@ -1,10 +1,9 @@
 # certn-client data-retention guidance
 
 Consumer duties for PII and report data held through
-`@clocklobster/certn-client`. Consistent with the README
-[PII stripping](../README.md#pii-stripping) and
-[Data retention](../README.md#data-retention) sections — where this file and
-the README disagree, the README controls and this file must be updated.
+`@clocklobster/certn-client`. This file is the canonical retention contract;
+the README [PII stripping](../README.md#pii-stripping) and
+[Data retention](../README.md#data-retention) sections link here.
 
 ## What the client returns
 

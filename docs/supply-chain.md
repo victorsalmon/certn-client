@@ -78,7 +78,7 @@ the command shown next to it.
 - **Treat provider timestamps and counts honestly.** `evictionCount` is
   always `null` ("not measured", never "zero evictions") and `completedAt`
   is `string | null` (provider `modified`/`created`, or `null`); see
-  `README.md` Data retention. Persist only the PII-stripped `reportJsonb`
+  `docs/RETENTION.md`. Persist only the PII-stripped `reportJsonb`
   and delete reports when the business purpose ends.
 - **Report supply-chain issues privately.** Do not open a public issue for a
   suspected vulnerability (dependency confusion, tampered tarball, leaked

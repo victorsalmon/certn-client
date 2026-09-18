@@ -166,6 +166,9 @@ webhook callbacks — it is never sent to the Certn API.
 
 ## API reference
 
+Signatures, defaults, and full semantics are owned by
+[`docs/API.md`](docs/API.md); the examples below are the quick-start path.
+
 ### `createCertnClient(config)`
 
 Factory that returns a `CertnClient` instance.
@@ -184,11 +187,8 @@ const { purchaseToken, secureLink } = await client.invite('jane@example.com', 'c
 Orders a Certn case via `POST /api/public/cases/order/`. `profileName` overrides
 the configured `profileName` and must be in the allow-list (`identity`, `credit`,
 `risk`). Returns the Certn case id (`purchaseToken`) and the applicant-facing
-invite link (`secureLink`).
-
-Throws before any network call on an empty/malformed `applicantEmail`.
-Retries once after `retryDelayMs` on HTTP 429/5xx; other 4xx fail fast.
-Every attempt aborts after `requestTimeoutMs` (default 15 s).
+invite link (`secureLink`). Validation, retry, and timeout semantics:
+[`docs/API.md`](docs/API.md).
 
 ### Fetch a report — `fetchReport(caseId)`
 
@@ -197,16 +197,10 @@ const report = await client.fetchReport('case-123');
 ```
 
 Fetches the case via `GET /api/public/cases/{id}` and normalizes it into a
-`ScreeningReport` (credit score, identity verification, check metadata). PII
-(input_claims, output_claims, emails, document numbers) is stripped — see
-[PII stripping](#pii-stripping).
-
-Throws before any network call on an empty/whitespace `caseId`. Retries once
-after `retryDelayMs` on HTTP 429/5xx; other 4xx fail fast. Every attempt aborts
-after `requestTimeoutMs` (default 15 s). `completedAt` is `string | null`
-(`null` when the provider supplies neither `modified` nor `created` — never
-fabricated); `evictionCount` is always `null` meaning "not measured by this
-client".
+PII-stripped `ScreeningReport` (credit score, identity verification, check
+metadata) — see [PII stripping](#pii-stripping). Validation, retry, timeout,
+and field semantics (`completedAt`, `evictionCount`): [`docs/API.md`](docs/API.md)
+and [`docs/RETENTION.md`](docs/RETENTION.md).
 
 ### Fetch the PDF — `fetchPdf(caseId)`
 
@@ -217,11 +211,8 @@ const pdf = await client.fetchPdf('case-123');
 Calls `POST /api/public/cases/{id}/generate-report/`, then polls
 `GET /api/public/cases/report-files/{id}/` every 750ms (up to 10 attempts) until
 `status === 'COMPLETE'`, then downloads the signed `pdf_url`. Returns the PDF
-bytes as a `Buffer`.
-
-Throws before any network call on an empty/whitespace `caseId`. API calls abort
-after `requestTimeoutMs` (default 15 s); the PDF download aborts after
-`pdfDownloadTimeoutMs` (default 30 s).
+bytes as a `Buffer`. Polling, timeout, and validation semantics:
+[`docs/API.md`](docs/API.md).
 
 ### Cancel a case — `cancelCase(caseId)`
 
@@ -229,9 +220,8 @@ after `requestTimeoutMs` (default 15 s); the PDF download aborts after
 await client.cancelCase('case-123');
 ```
 
-Calls `POST /api/public/cases/{id}/cancel/`.
-
-Throws before any network call on an empty/whitespace `caseId`.
+Calls `POST /api/public/cases/{id}/cancel/`; rejects an empty/whitespace
+`caseId` before any network call.
 
 ### Verify a webhook — `parseWebhook(payload, headers, rawBody?)`
 
@@ -278,13 +268,13 @@ bump the profile `version` and update `checkTypesWithArguments`. The retired
 
 ## Error handling
 
+Timeout, retry, and pre-flight validation semantics are documented in
+[`docs/API.md`](docs/API.md#polling-timeout-and-retry-semantics-as-implemented).
+Error messages:
+
 - **HTTP errors** — non-2xx responses throw `Error('Certn request failed: <METHOD> <path>: HTTP <status>')`.
-- **Timeouts** — every API request aborts after `requestTimeoutMs` (default 15 s)
-  and the PDF download after `pdfDownloadTimeoutMs` (default 30 s), throwing
-  `Error('Certn request timed out: <label> after <ms>ms')`. Timeouts are never retried.
-- **Bounded retry** — `invite` / `fetchReport` retry once after `retryDelayMs`
-  (default 500 ms) on HTTP 429/5xx; other 4xx, timeouts, network errors, and
-  webhook-signature failures are never retried.
+- **Timeouts** — `Error('Certn request timed out: <label> after <ms>ms')`;
+  timeouts are never retried.
 - **Input validation** — `Error('Invalid applicant email: expected a non-empty email address')`
   and `Error('Invalid case id: expected a non-empty case id')` throw before any
   network call.
@@ -335,44 +325,20 @@ no-ops.
 
 ## PII stripping
 
-`fetchReport` returns a `ScreeningReport` with a `reportJsonb` field that contains
-**only** normalized outcomes and check metadata:
-
-```ts
-{
-  id, short_id, created, overall_status, overall_score,
-  checks: [{ id, short_id, type, status, score, sub_score, adjudication_score, adjudication_sub_score }]
-}
-```
-
-`input_claims`, `output_claims`, email addresses, and identity document numbers
-are **never** included. Consuming apps can safely persist `reportJsonb` without
-additional PII filtering.
+`fetchReport` returns a `ScreeningReport` whose `reportJsonb` contains **only**
+normalized outcomes and check metadata — `input_claims`, `output_claims`, email
+addresses, and identity document numbers are **never** included, so consuming
+apps can safely persist `reportJsonb` without additional PII filtering. Field
+shape and consumer duties: [`docs/RETENTION.md`](docs/RETENTION.md).
 
 ## Data retention
 
-Consuming apps may persist only two screening artifacts from this client:
-
-- `reportJsonb` (the PII-stripped normalized report from `fetchReport` — see
-  [PII stripping](#pii-stripping));
-- the PDF bytes returned by `fetchPdf`.
-
-Minimization and deletion duties stay with the consumer: store these artifacts
-only for as long as the tenancy decision requires, restrict access to staff who
-need it, and delete them (including backups, where feasible) when the retention
-purpose expires or the applicant requests erasure. Never persist upstream
-payloads (`input_claims`, `output_claims`, emails, identity documents) — the
-client strips them before returning.
-
-Field semantics for retention logic:
-
-- `evictionCount` is always `null`, which means **not measured** — this client
-  never sources eviction data. `null` must not be stored, displayed, or
-  reasoned about as `0` evictions.
-- `completedAt` is `string | null` (never fabricated). It is derived from the
-  upstream `modified` timestamp, falling back to `created`, and is `null` when
-  the provider supplies neither. Consumers must treat `null` as "completion
-  time unknown", not as "just completed".
+Consumers may persist only the PII-stripped `reportJsonb` and the PDF bytes,
+restrict access to staff who need them, and delete both when the tenancy purpose
+ends or the applicant requests erasure — never persist upstream payloads
+(`input_claims`, `output_claims`, emails, identity documents). Field semantics
+(`completedAt`, `evictionCount`) and the full minimization/deletion duties:
+[`docs/RETENTION.md`](docs/RETENTION.md).
 
 ## Testing
 
