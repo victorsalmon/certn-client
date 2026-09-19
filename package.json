@@ -56,8 +56,9 @@
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/vitest-runner": "^10.0.0",
     "@types/node": "^26.4.1",
-    "typescript": "^7.0.2",
-    "vitest": "^5.0.0"
+    "@typescript/native": "npm:typescript@^7.0.2",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "vitest": "^4.1.11"
   },
   "overrides": {
     "qs": "^6.16.0"
