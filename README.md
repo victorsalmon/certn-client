@@ -342,6 +342,11 @@ ends or the applicant requests erasure — never persist upstream payloads
 (`completedAt`, `evictionCount`) and the full minimization/deletion duties:
 [`docs/RETENTION.md`](docs/RETENTION.md).
 
+Residency: the production base URL is Canadian (`https://api.ca.certn.co`);
+no residency claim is made for the sandbox host (jurisdiction undocumented) —
+decided 2026-09-19, see
+[`docs/decisions/2026-09-19-certn-client-audit-routings.md`](docs/decisions/2026-09-19-certn-client-audit-routings.md).
+
 ## Testing
 
 ```bash
@@ -372,6 +377,11 @@ live Certn API; to exercise the client against sandbox/production manually,
 set `CERTN_API_KEY` / `CERTN_WEBHOOK_SECRET` (see [Configuration](#configuration))
 and drive `examples/quickstart.ts` — no automated credentialed test target is
 included.
+
+QA evidence: the path-redacted `reports/salmon-run/` QA-evidence JSON is
+tracked in-repo as public proof of the offline suite (decided 2026-09-19;
+future runs must redact machine-specific paths before committing) — see
+[`docs/decisions/2026-09-19-certn-client-audit-routings.md`](docs/decisions/2026-09-19-certn-client-audit-routings.md).
 
 ## Development
 
@@ -424,6 +434,7 @@ docs/
   API.md
   RETENTION.md
   supply-chain.md
+  decisions/2026-09-19-certn-client-audit-routings.md
 ```
 
 ## Certn endpoint reference

@@ -46,6 +46,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Bumped GitHub Actions pins to `actions/checkout@v7` and
+  `actions/setup-node@v7`, keeping `node-version-file: .nvmrc`, `cache: npm`,
+  and both `npm audit --audit-level=high` gates with the
+  `typecheck`/`build`/`test` order intact.
+- Recorded the nine deferred audit routing decisions in
+  `docs/decisions/2026-09-19-certn-client-audit-routings.md` (Actions bump,
+  vitest-5 deferral, `@types/node` line, `invite()` caller-retry policy, API
+  surface promise, QA-evidence tracking, compliance gate, sandbox no-claim,
+  AGENTS.md stance) with matching `docs/API.md`, `docs/supply-chain.md`, and
+  README pointers; no runtime source behavior change.
+
 - Bumped `@types/node` to `^26.6.2` (latest stable patch/minor); no runtime
   behavior change.
 - Corrected `docs/API.md` so its "public surface" claim matches the package

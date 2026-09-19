@@ -24,7 +24,8 @@ the command shown next to it.
   `^4.1.11`, not the latest major, because `@stryker-mutator/vitest-runner`
   does not yet support vitest 5 (mutant substitution silently fails upstream of
   the runner's tested matrix). Revisit trigger: restore the latest stable
-  `vitest` once the runner supports it.
+  `vitest` once the runner supports it (decided 2026-09-19; see
+  `docs/decisions/2026-09-19-certn-client-audit-routings.md`).
 - **Pinned, committed lockfile.** `package-lock.json` is committed at the
   repo root, so `npm ci` installs the exact reviewed tree. Reproduce:
   `Test-Path package-lock.json` (PowerShell) or `test -f package-lock.json`
@@ -34,6 +35,12 @@ the command shown next to it.
   contains `22`; CI's `setup-node` uses `node-version-file: .nvmrc`.
   Reproduce: `Get-Content .nvmrc` and
   `node -e "console.log(require('./package.json').engines.node)"`.
+- **`@types/node` tracks the newest stable line.** `@types/node` is kept on
+  the latest stable major (currently `^26.6.2`) while `engines.node` stays
+  `>= 22`: types may describe APIs absent from Node 22, but the drift is
+  dev-only and CI proves compatibility on the Node 22 runtime (decided
+  2026-09-19; see
+  `docs/decisions/2026-09-19-certn-client-audit-routings.md`).
 - **No extra HTTP layer.** The client uses the Node ≥ 22 global `fetch`
   (see `README.md` Install); there is no `axios`/`node-fetch`/`got`
   dependency to audit or keep current.
@@ -59,7 +66,9 @@ the command shown next to it.
   runs, in order: `npm ci` → prod-tree audit
   (`npm audit --omit=dev --audit-level=high`) → full-tree audit
   (`npm audit --audit-level=high`) → `npm run typecheck` → `npm run build`
-  → `npm test`. The audit steps fail on HIGH-or-worse advisories.
+  → `npm test`. The audit steps fail on HIGH-or-worse advisories. The
+  workflow pins `actions/checkout@v7` and `actions/setup-node@v7`
+  (`node-version-file: .nvmrc`, `cache: npm`).
 - **Known advisory state.** The production tree is clean. Remaining
   MODERATE `qs` advisories arrive dev-only via
   `typed-rest-client@2.3.1` ← `@stryker-mutator/core` (mutation testing, not
