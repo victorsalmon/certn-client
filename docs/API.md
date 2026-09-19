@@ -1,7 +1,8 @@
 # certn-client API reference
 
 Public surface of `@clocklobster/certn-client` — every export of `src/index.ts`
-with its signature and one-line semantics. Auth is
+(the package root) with its signature and one-line semantics, plus the
+module-level constants those exports are built on. Auth is
 `Authorization: Api-Key <key>` against the Certn Centric paths under
 `/api/public/cases/*` only.
 
@@ -26,9 +27,9 @@ with its signature and one-line semantics. Auth is
 - `createCertnConfigFromEnv(env?: NodeJS.ProcessEnv): CertnClientConfig` — build config from `CERTN_API_KEY` + `CERTN_WEBHOOK_SECRET` (both required, throws when missing), `CERTN_BASE_URL` (else sandbox/production by `CERTN_ENVIRONMENT`), `CERTN_PROFILE` (defaults to `identity`), `CERTN_GROUP`, `CERTN_TAGS` (JSON array, fail-safe), `CERTN_APPLICANT_LANGUAGE`.
 - `CERTN_SANDBOX_BASE_URL: string` — `https://api.sandbox.certn.co`.
 - `CERTN_PRODUCTION_BASE_URL: string` — `https://api.ca.certn.co`.
-- `DEFAULT_REQUEST_TIMEOUT_MS = 15_000` — default per-attempt timeout for Certn API requests, overridable via `config.requestTimeoutMs`.
-- `DEFAULT_PDF_DOWNLOAD_TIMEOUT_MS = 30_000` — default timeout for the signed PDF download, overridable via `config.pdfDownloadTimeoutMs`.
-- `DEFAULT_RETRY_DELAY_MS = 500` — default delay before the single retry on HTTP 429/5xx, overridable via `config.retryDelayMs`.
+- `DEFAULT_REQUEST_TIMEOUT_MS = 15_000` — default per-attempt timeout for Certn API requests, overridable via `config.requestTimeoutMs`. Module constant in `src/config.ts`; not re-exported from the package root.
+- `DEFAULT_PDF_DOWNLOAD_TIMEOUT_MS = 30_000` — default timeout for the signed PDF download, overridable via `config.pdfDownloadTimeoutMs`. Module constant in `src/config.ts`; not re-exported from the package root.
+- `DEFAULT_RETRY_DELAY_MS = 500` — default delay before the single retry on HTTP 429/5xx, overridable via `config.retryDelayMs`. Module constant in `src/config.ts`; not re-exported from the package root.
 - `interface CertnClientConfig` — `{ baseUrl, apiKey, webhookSecret, profileName?, group?, tags?, applicantLanguage?, requestTimeoutMs?, pdfDownloadTimeoutMs?, retryDelayMs? }`.
 
 ## Profiles (`src/profiles.ts`)
@@ -36,7 +37,7 @@ with its signature and one-line semantics. Auth is
 - `SCREENING_PROFILES: readonly ScreeningProfile[]` — allow-listed versioned profiles (`identity`, `credit`, `risk`) with current Certn check identifiers.
 - `getScreeningProfile(name: string): ScreeningProfile` — resolve a profile by name; throws on unknown/legacy names.
 - `isScreeningProfile(name: string): boolean` — true for allow-listed profile names (case-sensitive).
-- `DEFAULT_PROFILE_NAME = 'identity'` — profile used when the caller specifies none.
+- `DEFAULT_PROFILE_NAME = 'identity'` — profile used when the caller specifies none (exported from the `./profiles` subpath, not the package root).
 - `interface ScreeningProfile` — `{ name, version, checkTypesWithArguments, label }`.
 
 ## Types and errors (`src/types.ts`)

@@ -2,7 +2,7 @@
   "schemaVersion": 2,
   "decision": "pass",
   "disposition": "not-applicable",
-  "repository": "C:\\Repos\\Public\\certn-client\\.worktrees\\salmon-portfolio-certn-supplychain-docs",
+  "repository": ".",
   "commit": "809993b638caec891630066e2511899372ce4265",
   "commands": [
     {

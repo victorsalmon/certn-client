@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Enforced HTTPS for the client `baseUrl` at construction: a plaintext
+  `http://` base URL now throws (HTTP is allowed only for
+  `localhost`/`127.0.0.1`), so the `Api-Key` header can never be sent over an
+  unencrypted connection.
 - Full-tree `npm audit` is clean (0 vulnerabilities): `fast-uri` HIGH fixed via
   `npm audit fix` (-> 3.1.7) and dev-only `qs` MODERATE chain pinned out via a
   `qs ^6.16.0` override. CI now gates both the prod and full trees on
@@ -37,11 +41,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Node >= 22, 105 passing tests), CI dependency-audit gate
   (`npm audit --omit=dev --audit-level=high`), and `engines` metadata
   (`node >= 22`).
+- Base-URL transport-safety tests (HTTPS required; localhost HTTP allowed) —
+  suite now 108 passing.
+
+### Changed
+
+- Bumped `@types/node` to `^26.6.2` (latest stable patch/minor); no runtime
+  behavior change.
+- Corrected `docs/API.md` so its "public surface" claim matches the package
+  root: `DEFAULT_REQUEST_TIMEOUT_MS` / `DEFAULT_PDF_DOWNLOAD_TIMEOUT_MS` /
+  `DEFAULT_RETRY_DELAY_MS` are module constants (not root exports), and
+  `DEFAULT_PROFILE_NAME` exports from the `./profiles` subpath.
+- Refreshed the `docs/supply-chain.md` dependency inventory (six
+  devDependencies) and documented the TypeScript side-by-side aliases
+  (`tsc` = TS7, `tsc6`/TS6 API for Stryker) plus the deliberately deferred
+  `vitest` major; linked it from the README dependency-audit section.
 
 ### Fixed
 
 - Corrected PDF polling description: `fetchPdf` polls the report-file endpoint
   on a fixed 750 ms interval, up to 10 attempts (not exponential backoff).
+- Redacted absolute local worktree paths from the committed
+  `reports/salmon-run/` QA-evidence JSON so the public repo carries no
+  machine-specific or fleet-lane references.
 
 ## [1.0.0] - 2026-08-21
 

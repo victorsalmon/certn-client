@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-7.x-blue.svg)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22-green.svg)](https://nodejs.org/)
-[![Tests](https://img.shields.io/badge/tests-105%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-108%20passing-brightgreen.svg)](#testing)
 
 A product-neutral TypeScript client for the [Certn Centric](https://certn.co) screening API —
 case ordering, report fetch, PDF retrieval, and X-Signature webhook verification.
@@ -286,6 +286,8 @@ Error messages:
 - **Polling timeout** — `Error('Certn report PDF did not become available before timeout')`
   after 10 attempts.
 - **PDF download** — `Error('Certn PDF download failed: HTTP <status>')`.
+- **Base URL** — `Error('Insecure Certn base URL: HTTPS is required (HTTP is allowed only for localhost)')`
+  or `Error('Invalid Certn base URL: expected an absolute http(s) URL')` throws at construction.
 
 ## Webhooks
 
@@ -343,11 +345,11 @@ ends or the applicant requests erasure — never persist upstream payloads
 ## Testing
 
 ```bash
-npm test               # vitest — 105 tests
+npm test               # vitest — 108 tests
 npm run test:mutation  # stryker mutation testing
 ```
 
-All 105 tests run offline with mocked `fetch` — no network calls and no live
+All 108 tests run offline with mocked `fetch` — no network calls and no live
 Certn credentials required. Credentialed runs against the Certn sandbox (real
 API key + network) are manual only; they are not part of the suite. The suite
 covers:
@@ -361,6 +363,7 @@ covers:
   action-required, missing object_id)
 - Error propagation (4xx fail-fast, 429/5xx single retry, timeout abort,
   email/caseId pre-validation, null-timestamp path)
+- Base-URL transport safety (HTTPS enforced at construction; localhost HTTP allowed)
 - Config-from-env (sandbox/production fallback, tags parsing, missing values)
 
 Offline vs credentialed runs: the default `npm test` suite is fully offline
@@ -396,6 +399,10 @@ If a future `npm audit` reports a HIGH-or-worse advisory in either tree, fix
 with `npm audit fix` (or a targeted upgrade/override as above), then re-run
 both audit commands before pushing. Any remaining MODERATE-or-lower advisory
 must be recorded in this table with its owner and upgrade trigger.
+
+Toolchain provenance — the TypeScript side-by-side aliases (`tsc` = TS7,
+`tsc6`/TS6 API for Stryker) and the deferred `vitest` major — is documented in
+[`docs/supply-chain.md`](docs/supply-chain.md).
 
 ## Project layout
 
@@ -441,6 +448,9 @@ All paths are relative to the configured `baseUrl` (sandbox or production).
   email addresses, or identity documents.
 - **API key in transit only** — the `apiKey` is sent only as an `Authorization`
   header to the Certn API; it is never logged or persisted by the client.
+- **HTTPS-only base URL** — the constructor rejects a plaintext `baseUrl`
+  (HTTP is allowed only for `localhost`/`127.0.0.1`), so the API key can never
+  be sent over an unencrypted connection.
 
 ## Contributing
 

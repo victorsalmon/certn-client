@@ -67,6 +67,25 @@ function assertValidCaseId(caseId: string): void {
   }
 }
 
+/**
+ * Reject a plaintext `baseUrl` before the API key can travel over HTTP.
+ * HTTPS is required; plain HTTP is allowed only for localhost dev servers.
+ */
+function assertSecureBaseUrl(baseUrl: string): void {
+  let url: URL;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    throw new Error('Invalid Certn base URL: expected an absolute http(s) URL');
+  }
+  if (url.protocol === 'https:') return;
+  const localHosts = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+  if (url.protocol === 'http:' && localHosts.has(url.hostname.toLowerCase())) return;
+  throw new Error(
+    'Insecure Certn base URL: HTTPS is required (HTTP is allowed only for localhost)'
+  );
+}
+
 /** True for the statuses the client retries once (HTTP 429 or any 5xx). */
 function isRetryableStatus(status: number): boolean {
   return status === 429 || status >= 500;
@@ -163,6 +182,7 @@ export class CertnClient {
   private readonly baseUrl: string;
 
   constructor(private readonly config: CertnClientConfig) {
+    assertSecureBaseUrl(config.baseUrl);
     this.baseUrl = config.baseUrl.replace(/\/+$/, '');
   }
 

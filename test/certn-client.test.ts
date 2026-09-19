@@ -1424,3 +1424,40 @@ describe('CertnClient – request resilience', () => {
     expect(report.evictionCount).toBeNull();
   });
 });
+
+describe('CertnClient – base URL transport safety', () => {
+  it('rejects a plaintext non-local base URL at construction (API key never sent over HTTP)', () => {
+    expect(
+      () =>
+        new CertnClient({
+          baseUrl: 'http://api.certn.co',
+          apiKey: 'certn-api-key',
+          webhookSecret: WEBHOOK_SECRET,
+        })
+    ).toThrow('Insecure Certn base URL: HTTPS is required');
+  });
+
+  it('rejects a relative or malformed base URL', () => {
+    expect(
+      () =>
+        new CertnClient({
+          baseUrl: 'not-a-url',
+          apiKey: 'certn-api-key',
+          webhookSecret: WEBHOOK_SECRET,
+        })
+    ).toThrow('Invalid Certn base URL');
+  });
+
+  it('allows HTTPS base URLs and localhost HTTP for development', () => {
+    const config = { apiKey: 'certn-api-key', webhookSecret: WEBHOOK_SECRET };
+    expect(new CertnClient({ ...config, baseUrl: 'https://api.ca.certn.co' })).toBeInstanceOf(
+      CertnClient
+    );
+    expect(new CertnClient({ ...config, baseUrl: 'http://localhost:3000' })).toBeInstanceOf(
+      CertnClient
+    );
+    expect(new CertnClient({ ...config, baseUrl: 'http://127.0.0.1:3000' })).toBeInstanceOf(
+      CertnClient
+    );
+  });
+});
