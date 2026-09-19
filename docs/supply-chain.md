@@ -8,10 +8,23 @@ the command shown next to it.
 ## Dependency provenance
 
 - **Zero runtime dependencies.** `package.json` declares no `dependencies`
-  field — only `devDependencies` (`@stryker-mutator/core`,
-  `@stryker-mutator/vitest-runner`, `@types/node`, `typescript`, `vitest`).
+  field — only `devDependencies`: `@stryker-mutator/core`,
+  `@stryker-mutator/vitest-runner`, `@types/node`, `@typescript/native`,
+  `typescript`, and `vitest` (six entries).
   Reproduce: `node -e "console.log(Object.keys(require('./package.json').dependencies || {}).length)"`
   prints `0`.
+- **TypeScript runs side-by-side (two aliases).** The `typescript` devDependency
+  is aliased to `@typescript/typescript6` (ships the `tsc6` binary and the TS6
+  compiler API Stryker consumes) and `@typescript/native` is aliased to
+  `typescript@7` (ships the `tsc` binary used by `npm run typecheck`/`build`).
+  Rationale: plain `typescript@7` starves Stryker's JS API
+  (`ts.parseConfigFileTextToJson` crash). Reproduce:
+  `node -e "for (const p of ['typescript','@typescript/native']) console.log(p, require('./node_modules/'+p+'/package.json').version)"`.
+- **`vitest` is pinned to the runner-supported major.** `vitest` is pinned to
+  `^4.1.11`, not the latest major, because `@stryker-mutator/vitest-runner`
+  does not yet support vitest 5 (mutant substitution silently fails upstream of
+  the runner's tested matrix). Revisit trigger: restore the latest stable
+  `vitest` once the runner supports it.
 - **Pinned, committed lockfile.** `package-lock.json` is committed at the
   repo root, so `npm ci` installs the exact reviewed tree. Reproduce:
   `Test-Path package-lock.json` (PowerShell) or `test -f package-lock.json`
@@ -52,7 +65,7 @@ the command shown next to it.
   `typed-rest-client@2.3.1` ← `@stryker-mutator/core` (mutation testing, not
   shipped); owner and upgrade trigger are recorded in `README.md` Security.
   Re-run either audit command locally and fix with `npm audit fix`.
-- **Test evidence.** The suite is 105 offline tests (mocked `fetch`, no
+- **Test evidence.** The suite is 108 offline tests (mocked `fetch`, no
   network, no credentials). Reproduce the count:
   `Select-String -Path test/*.ts -Pattern '^\s*(it|test)\(' -AllMatches`
   (or `grep -cE '^\s*(it|test)\(' test/*.test.ts`), then `npm test`.
