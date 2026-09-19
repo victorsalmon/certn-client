@@ -47,7 +47,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
-    "postinstall": "tsc -p tsconfig.build.json",
+    "prepare": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:mutation": "stryker run"
