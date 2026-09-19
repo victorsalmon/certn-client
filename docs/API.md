@@ -53,10 +53,30 @@ module-level constants those exports are built on. Auth is
 - `safeEqual(a: string, b: string): boolean` — constant-time string comparison (lengths differ → false).
 - `verifySecret(provided: string | undefined, expected: string): boolean` — true for a non-empty constant-time match; fails closed on empty input or empty expected secret.
 
+## Public surface promise (AL-CN-01, decided 2026-09-19)
+
+- `DEFAULT_REQUEST_TIMEOUT_MS` / `DEFAULT_PDF_DOWNLOAD_TIMEOUT_MS` /
+  `DEFAULT_RETRY_DELAY_MS` are module constants in `src/config.ts` and are
+  **not** part of the package-root promise; import them from the built
+  `dist/config.js` only if needed. `DEFAULT_PROFILE_NAME` is exported from
+  the `./profiles` subpath, not the package root. No new root export is
+  added here — see
+  `docs/decisions/2026-09-19-certn-client-audit-routings.md` for the full
+  record. The root (`src/index.ts`) promise stays exactly the exports listed
+  above.
+
 ## Polling, timeout, and retry semantics (as implemented)
 
 - `fetchPdf` polls `GET /api/public/cases/report-files/{id}/` on a **fixed 750 ms interval, up to 10 attempts** (`PDF_POLL_INTERVAL_MS = 750`, `MAX_PDF_POLL_ATTEMPTS = 10`) — not exponential backoff. `COMPLETE` + `pdf_url` downloads; `FAILED` throws; no `COMPLETE` within 10 attempts throws a did-not-become-available error.
 - Every API attempt aborts after `config.requestTimeoutMs` (default 15 s) via `AbortSignal.timeout`; the PDF download aborts after `config.pdfDownloadTimeoutMs` (default 30 s); aborts surface as `Certn request timed out` errors.
 - `invite` and `fetchReport` retry **once** after `config.retryDelayMs` (default 500 ms) on HTTP 429/5xx; other 4xx, timeouts, network errors, and webhook-signature failures never retry.
+- `invite()` idempotency policy (AR-CN-01, decided 2026-09-19): the single
+  429/5xx retry stands and `src/client.ts` is unchanged. `POST
+  /api/public/cases/order/` is non-idempotent and Certn advertises no
+  idempotency key / client request id, so a 5xx after provider-side processing
+  can create a duplicate billable case. Callers own de-duplication: reuse the
+  returned `purchaseToken` (the Certn case id) and/or look the applicant up by
+  email before re-ordering, rather than blindly retrying `invite()`.
+  Full record: `docs/decisions/2026-09-19-certn-client-audit-routings.md`.
 - `invite` rejects empty/malformed `applicantEmail` before any network call; `invite`/`fetchReport`/`fetchPdf`/`cancelCase` throw on empty/whitespace `caseId` before any network call.
 - `completedAt` is `string | null` — provider `modified` (fallback `created`), or `null` when the provider supplies neither; the client never fabricates a timestamp. `evictionCount` is always `null` ("not measured", never "zero evictions").
