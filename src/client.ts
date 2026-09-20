@@ -14,11 +14,7 @@
  */
 
 import { createHmac } from 'node:crypto';
-import type {
-  ScreeningInvitation,
-  ScreeningReport,
-  WebhookResult,
-} from './types.js';
+import type { ScreeningInvitation, ScreeningReport, WebhookResult } from './types.js';
 import { CertnWebhookSignatureError } from './types.js';
 import { safeEqual } from './util.js';
 import { DEFAULT_PROFILE_NAME, getScreeningProfile } from './profiles.js';
@@ -119,17 +115,16 @@ function waitMs(ms: number): Promise<void> {
  * Find the first check whose `type` contains the keyword, case-insensitively.
  * Certn check identifiers include a category prefix (e.g. `CREDIT_REPORT_1`).
  */
-function findCheckByTypeKeyword(
-  checks: JsonObject[],
-  keyword: string
-): JsonObject | undefined {
-  return checks.find((check) => String(check.type ?? '').toUpperCase().includes(keyword));
+function findCheckByTypeKeyword(checks: JsonObject[], keyword: string): JsonObject | undefined {
+  return checks.find((check) =>
+    String(check.type ?? '')
+      .toUpperCase()
+      .includes(keyword)
+  );
 }
 
 /** Derive the normalized `idVerified` flag from an identity check, if present. */
-function normalizeIdentityVerification(
-  identityCheck: JsonObject | undefined
-): boolean | null {
+function normalizeIdentityVerification(identityCheck: JsonObject | undefined): boolean | null {
   if (identityCheck === undefined) return null;
   return firstBoolean(
     identityCheck.id_verified,
@@ -206,21 +201,27 @@ export class CertnClient {
     _applicantName?: string
   ): Promise<ScreeningInvitation> {
     assertValidApplicantEmail(applicantEmail);
-    const profile = getScreeningProfile(profileName ?? this.config.profileName ?? DEFAULT_PROFILE_NAME);
-    const data = await this.request<JsonObject>('/api/public/cases/order/', {
-      method: 'POST',
-      body: JSON.stringify({
-        email_address: applicantEmail,
-        send_invite_email: false,
-        return_invite_link: true,
-        check_types_with_arguments: profile.checkTypesWithArguments,
-        ...(this.config.group ? { group: this.config.group } : {}),
-        ...(this.config.tags && this.config.tags.length ? { tags: this.config.tags } : {}),
-        ...(this.config.applicantLanguage
-          ? { applicant_language: this.config.applicantLanguage }
-          : {}),
-      }),
-    }, { retry: true });
+    const profile = getScreeningProfile(
+      profileName ?? this.config.profileName ?? DEFAULT_PROFILE_NAME
+    );
+    const data = await this.request<JsonObject>(
+      '/api/public/cases/order/',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          email_address: applicantEmail,
+          send_invite_email: false,
+          return_invite_link: true,
+          check_types_with_arguments: profile.checkTypesWithArguments,
+          ...(this.config.group ? { group: this.config.group } : {}),
+          ...(this.config.tags && this.config.tags.length ? { tags: this.config.tags } : {}),
+          ...(this.config.applicantLanguage
+            ? { applicant_language: this.config.applicantLanguage }
+            : {}),
+        }),
+      },
+      { retry: true }
+    );
     const caseId = asString(data.id);
     const inviteLink = asString(data.invite_link);
     if (!caseId || !inviteLink) {
@@ -421,7 +422,7 @@ export class CertnClient {
       return await fetch(url, { ...init, signal });
     } catch (err) {
       if (signal.aborted) {
-        throw new Error(`Certn request timed out: ${label} after ${timeoutMs}ms`);
+        throw new Error(`Certn request timed out: ${label} after ${timeoutMs}ms`, { cause: err });
       }
       throw err;
     }

@@ -1,0 +1,9 @@
+dist/
+node_modules/
+stryker-report/
+stryker-tmp/
+coverage/
+reports/
+.worktrees/
+.backup/
+.quarantine/

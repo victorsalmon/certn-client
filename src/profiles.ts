@@ -73,9 +73,7 @@ const PROFILE_BY_NAME: ReadonlyMap<string, ScreeningProfile> = new Map(
 export function getScreeningProfile(name: string): ScreeningProfile {
   const profile = PROFILE_BY_NAME.get(name);
   if (!profile) {
-    throw new Error(
-      `Unknown screening profile: ${name}. Allowed: ${ALLOWED_PROFILE_NAMES}`
-    );
+    throw new Error(`Unknown screening profile: ${name}. Allowed: ${ALLOWED_PROFILE_NAMES}`);
   }
   return profile;
 }

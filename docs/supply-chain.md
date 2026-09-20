@@ -8,11 +8,19 @@ the command shown next to it.
 ## Dependency provenance
 
 - **Zero runtime dependencies.** `package.json` declares no `dependencies`
-  field — only `devDependencies`: `@stryker-mutator/core`,
+  field — only `devDependencies`: `@eslint/js`, `@stryker-mutator/core`,
   `@stryker-mutator/vitest-runner`, `@types/node`, `@typescript/native`,
-  `typescript`, and `vitest` (six entries).
+  `eslint`, `markdownlint-cli2`, `prettier`, `typescript`,
+  `typescript-eslint`, and `vitest` (eleven entries).
   Reproduce: `node -e "console.log(Object.keys(require('./package.json').dependencies || {}).length)"`
   prints `0`.
+- **Style tooling is dev-only and gated.** `eslint` (+ `@eslint/js`,
+  `typescript-eslint`), `prettier`, and `markdownlint-cli2` are devDependencies
+  for `npm run lint` / `format:check` / `lint:md`; they never enter the
+  published `dist/` surface (still zero runtime dependencies). Config lives in
+  `eslint.config.mjs`, `.prettierrc.json`, `.markdownlint-cli2.jsonc`, and
+  `.editorconfig` (decided 2026-09-20; see
+  `docs/decisions/2026-09-19-certn-client-audit-routings.md`).
 - **TypeScript runs side-by-side (two aliases).** The `typescript` devDependency
   is aliased to `@typescript/typescript6` (ships the `tsc6` binary and the TS6
   compiler API Stryker consumes) and `@typescript/native` is aliased to
@@ -65,10 +73,11 @@ the command shown next to it.
 - **CI release gate (`.github/workflows/ci.yml`).** Every push/PR to `main`
   runs, in order: `npm ci` → prod-tree audit
   (`npm audit --omit=dev --audit-level=high`) → full-tree audit
-  (`npm audit --audit-level=high`) → `npm run typecheck` → `npm run build`
-  → `npm test`. The audit steps fail on HIGH-or-worse advisories. The
-  workflow pins `actions/checkout@v7` and `actions/setup-node@v7`
-  (`node-version-file: .nvmrc`, `cache: npm`).
+  (`npm audit --audit-level=high`) → style gate (`npm run lint`,
+  `npm run format:check`, `npm run lint:md`) → `npm run typecheck` →
+  `npm run build` → `npm test`. The audit steps fail on HIGH-or-worse
+  advisories. The workflow pins `actions/checkout@v7` and
+  `actions/setup-node@v7` (`node-version-file: .nvmrc`, `cache: npm`).
 - **Known advisory state.** The production tree is clean. Remaining
   MODERATE `qs` advisories arrive dev-only via
   `typed-rest-client@2.3.1` ← `@stryker-mutator/core` (mutation testing, not
