@@ -72,7 +72,8 @@ the command shown next to it.
 - **Known advisory state.** The production tree is clean. Remaining
   MODERATE `qs` advisories arrive dev-only via
   `typed-rest-client@2.3.1` ← `@stryker-mutator/core` (mutation testing, not
-  shipped); owner and upgrade trigger are recorded in `README.md` Security.
+  shipped); owner and upgrade trigger are recorded in the `README.md`
+  Dependency audit table.
   Re-run either audit command locally and fix with `npm audit fix`.
 - **Test evidence.** The suite is 108 offline tests (mocked `fetch`, no
   network, no credentials). Reproduce the count:
