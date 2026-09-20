@@ -461,7 +461,10 @@ export class CertnClient {
   }
 }
 
-/** Factory matching the vopay-client pattern (`createCertnClient(config)`). */
+/**
+ * Factory matching the [vopay-client](https://github.com/victorsalmon/vopay-client)
+ * pattern (`createCertnClient(config)`).
+ */
 export function createCertnClient(config: CertnClientConfig): CertnClient {
   return new CertnClient(config);
 }

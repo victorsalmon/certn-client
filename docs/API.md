@@ -9,7 +9,8 @@ module-level constants those exports are built on. Auth is
 ## Client factory
 
 - `createCertnClient(config: CertnClientConfig): CertnClient` — construct a
-  product-neutral Certn Centric screening client (same pattern as vopay-client).
+  product-neutral Certn Centric screening client (same pattern as
+  [vopay-client](https://github.com/victorsalmon/vopay-client)).
 - `class CertnClient` — stateful client bound to one `CertnClientConfig`;
   `baseUrl` trailing slashes are normalized at construction.
 
