@@ -172,11 +172,7 @@ describe('CertnClient', () => {
     );
     const hex = createHmac('sha256', WEBHOOK_SECRET).update(rawBody).digest('hex');
     await expect(
-      makeClient().parseWebhook(
-        JSON.parse(rawBody),
-        { 'X-Signature': `sha256=${hex}  ` },
-        rawBody
-      )
+      makeClient().parseWebhook(JSON.parse(rawBody), { 'X-Signature': `sha256=${hex}  ` }, rawBody)
     ).resolves.toMatchObject({ status: 'completed' });
   });
 
@@ -323,9 +319,7 @@ describe('CertnClient', () => {
       'fetch',
       vi.fn(async () => okJson({ status: 'COMPLETE' }, 201))
     );
-    await expect(makeClient().fetchPdf('case-123')).rejects.toThrow(
-      'missing case_report_file_id'
-    );
+    await expect(makeClient().fetchPdf('case-123')).rejects.toThrow('missing case_report_file_id');
   });
 
   it('fails when the report file status is FAILED', async () => {
@@ -406,7 +400,10 @@ describe('CertnClient', () => {
         },
       ],
     };
-    vi.stubGlobal('fetch', vi.fn(async () => okJson(raw)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => okJson(raw))
+    );
     const report = await makeClient().fetchReport('case-123');
     expect(report.idVerified).toBeNull();
     expect(report.creditScore).toBe(715);
@@ -427,7 +424,10 @@ describe('CertnClient', () => {
         },
       ],
     };
-    vi.stubGlobal('fetch', vi.fn(async () => okJson(raw)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => okJson(raw))
+    );
     const report = await makeClient().fetchReport('case-123');
     expect(report.idVerified).toBe(false);
     expect(report.completedAt).toBe('2026-08-21T10:00:00Z');
@@ -662,7 +662,10 @@ describe('CertnClient', () => {
         },
       ],
     };
-    vi.stubGlobal('fetch', vi.fn(async () => okJson(raw)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => okJson(raw))
+    );
     const report = await makeClient().fetchReport('case-123');
     expect(report.reportJsonb).toMatchObject({
       id: 'case-123',
@@ -786,25 +789,19 @@ describe('CertnClient – additional mutation-killing tests', () => {
   it('invite throws when response id is an empty string (asString rejects empty strings)', async () => {
     const fetchMock = vi.fn(async () => okJson({ id: '', invite_link: 'https://invite' }));
     vi.stubGlobal('fetch', fetchMock);
-    await expect(makeClient().invite('jane@example.com')).rejects.toThrow(
-      'missing id/invite_link'
-    );
+    await expect(makeClient().invite('jane@example.com')).rejects.toThrow('missing id/invite_link');
   });
 
   it('invite throws when response invite_link is an empty string', async () => {
     const fetchMock = vi.fn(async () => okJson({ id: 'case-1', invite_link: '' }));
     vi.stubGlobal('fetch', fetchMock);
-    await expect(makeClient().invite('jane@example.com')).rejects.toThrow(
-      'missing id/invite_link'
-    );
+    await expect(makeClient().invite('jane@example.com')).rejects.toThrow('missing id/invite_link');
   });
 
   it('invite throws when response id is a non-string type', async () => {
     const fetchMock = vi.fn(async () => okJson({ id: 123, invite_link: 'https://invite' }));
     vi.stubGlobal('fetch', fetchMock);
-    await expect(makeClient().invite('jane@example.com')).rejects.toThrow(
-      'missing id/invite_link'
-    );
+    await expect(makeClient().invite('jane@example.com')).rejects.toThrow('missing id/invite_link');
   });
 
   it('parseWebhook matches X-Signature case-insensitively', async () => {
@@ -828,7 +825,10 @@ describe('CertnClient – additional mutation-killing tests', () => {
 
   it('parseWebhook treats array payload as empty object (no object_id)', async () => {
     const rawBody = JSON.stringify({ event_type: 'CASE_STATUS_CHANGED' });
-    vi.stubGlobal('fetch', vi.fn(async () => okJson({})));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => okJson({}))
+    );
     const hex = createHmac('sha256', WEBHOOK_SECRET).update(rawBody).digest('hex');
     const result = await makeClient().parseWebhook([], { 'X-Signature': hex }, rawBody);
     expect(result).toEqual({ applicationId: '', status: 'error' });
@@ -848,7 +848,10 @@ describe('CertnClient – additional mutation-killing tests', () => {
         },
       ],
     };
-    vi.stubGlobal('fetch', vi.fn(async () => okJson(raw)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => okJson(raw))
+    );
     const report = await makeClient().fetchReport('case-123');
     expect(report.creditScore).toBe(720);
   });
@@ -867,7 +870,10 @@ describe('CertnClient – additional mutation-killing tests', () => {
         },
       ],
     };
-    vi.stubGlobal('fetch', vi.fn(async () => okJson(raw)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => okJson(raw))
+    );
     const report = await makeClient().fetchReport('case-123');
     expect(report.creditScore).toBeNull();
   });
@@ -886,7 +892,10 @@ describe('CertnClient – additional mutation-killing tests', () => {
         },
       ],
     };
-    vi.stubGlobal('fetch', vi.fn(async () => okJson(raw)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => okJson(raw))
+    );
     const report = await makeClient().fetchReport('case-123');
     expect(report.creditScore).toBeNull();
   });
@@ -905,7 +914,10 @@ describe('CertnClient – additional mutation-killing tests', () => {
         },
       ],
     };
-    vi.stubGlobal('fetch', vi.fn(async () => okJson(raw)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => okJson(raw))
+    );
     const report = await makeClient().fetchReport('case-123');
     expect(report.idVerified).toBe(true);
   });
@@ -924,7 +936,10 @@ describe('CertnClient – additional mutation-killing tests', () => {
         },
       ],
     };
-    vi.stubGlobal('fetch', vi.fn(async () => okJson(raw)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => okJson(raw))
+    );
     const report = await makeClient().fetchReport('case-123');
     expect(report.idVerified).toBe(true);
   });
@@ -1029,9 +1044,7 @@ describe('CertnClient – additional mutation-killing tests', () => {
       'fetch',
       vi.fn(async () => new Response(JSON.stringify({ error: 'not found' }), { status: 404 }))
     );
-    await expect(makeClient().fetchReport('case-404')).rejects.toThrow(
-      'Certn request failed: GET'
-    );
+    await expect(makeClient().fetchReport('case-404')).rejects.toThrow('Certn request failed: GET');
   });
 });
 
@@ -1229,7 +1242,10 @@ describe('CertnClient – final mutation-killing tests', () => {
       overall_status: 'COMPLETE',
       checks: 'not-an-array',
     };
-    vi.stubGlobal('fetch', vi.fn(async () => okJson(raw)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => okJson(raw))
+    );
     const report = await makeClient().fetchReport('case-123');
     expect(report.reportJsonb.checks).toEqual([]);
   });
@@ -1248,7 +1264,10 @@ describe('CertnClient – final mutation-killing tests', () => {
         },
       ],
     };
-    vi.stubGlobal('fetch', vi.fn(async () => okJson(raw)));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => okJson(raw))
+    );
     const report = await makeClient().fetchReport('case-123');
     expect(report.creditScore).toBeNull();
   });
@@ -1260,11 +1279,13 @@ describe('CertnClient – final mutation-killing tests', () => {
       return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
     });
     vi.stubGlobal('fetch', fetchMock);
+    const request = (
+      client as unknown as { request: (path: string, init?: RequestInit) => Promise<unknown> }
+    ).request.bind(client);
     await expect(
-      (client as any).request('/api/public/cases/404', { headers: { 'X-Custom': 'custom-value' } })
+      request('/api/public/cases/404', { headers: { 'X-Custom': 'custom-value' } })
     ).rejects.toThrow('Certn request failed: GET /api/public/cases/404: HTTP 404');
   });
-
 });
 
 describe('createCertnConfigFromEnv – value preservation', () => {
@@ -1368,8 +1389,7 @@ describe('CertnClient – request resilience', () => {
       'fetch',
       vi.fn(async () => {
         calls++;
-        if (calls === 1)
-          return new Response(JSON.stringify({ type: 'error' }), { status: 503 });
+        if (calls === 1) return new Response(JSON.stringify({ type: 'error' }), { status: 503 });
         return okJson({
           id: 'case-123',
           created: '2026-08-21T10:00:00Z',
@@ -1395,7 +1415,9 @@ describe('CertnClient – request resilience', () => {
   });
 
   it('rejects empty/malformed applicantEmail before any network call', async () => {
-    const fetchMock = vi.fn(async () => okJson({ id: 'case-123', invite_link: 'https://invite' }, 201));
+    const fetchMock = vi.fn(async () =>
+      okJson({ id: 'case-123', invite_link: 'https://invite' }, 201)
+    );
     vi.stubGlobal('fetch', fetchMock);
     for (const bad of ['', '   ', 'not-an-email', 'missing-at.com', '@missing-local.com']) {
       await expect(makeClient().invite(bad)).rejects.toThrow('Invalid applicant email');

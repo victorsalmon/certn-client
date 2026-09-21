@@ -1,0 +1,9 @@
+{
+  // markdownlint only the prose the package publishes: docs/ and the root README.
+  // MD013 (line length) is off because tables and long URLs in the API reference
+  // legitimately exceed 80 columns.
+  "config": {
+    "MD013": false
+  },
+  "globs": ["docs/**/*.md", "README.md"]
+}

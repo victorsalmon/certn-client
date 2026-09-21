@@ -49,15 +49,24 @@
     "build": "tsc -p tsconfig.build.json",
     "prepare": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:md": "markdownlint-cli2",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"examples/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" \"examples/**/*.ts\"",
     "test": "vitest run",
     "test:mutation": "stryker run"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@stryker-mutator/core": "^10.0.0",
     "@stryker-mutator/vitest-runner": "^10.0.0",
     "@types/node": "^26.6.2",
     "@typescript/native": "npm:typescript@^7.0.2",
+    "eslint": "^10.11.0",
+    "markdownlint-cli2": "^0.23.3",
+    "prettier": "^3.9.8",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "typescript-eslint": "^8.70.0",
     "vitest": "^4.1.11"
   },
   "overrides": {

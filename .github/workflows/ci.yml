@@ -25,6 +25,13 @@ jobs:
         run: |
           npm audit --omit=dev --audit-level=high
           npm audit --audit-level=high
+      - name: Style gate (eslint, prettier, markdownlint)
+        # Config: eslint.config.mjs, .prettierrc.json, .markdownlint-cli2.jsonc.
+        # Re-run locally with `npm run lint`, `npm run format:check`, `npm run lint:md`.
+        run: |
+          npm run lint
+          npm run format:check
+          npm run lint:md
       - run: npm run typecheck
       - run: npm run build
       - run: npm test

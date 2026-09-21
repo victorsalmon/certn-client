@@ -14,6 +14,9 @@ Requires Node.js >= 22 (see `.nvmrc`).
 npm test           # vitest — unit tests, mocked fetch, no network calls
 npm run typecheck  # tsc --noEmit
 npm run build      # emit dist/ + declarations
+npm run lint       # eslint (flat config)
+npm run format:check  # prettier --check (use `npm run format` to fix)
+npm run lint:md    # markdownlint on docs/ and README.md
 ```
 
 `npm run test:mutation` runs Stryker; keep an eye on the mutation score when touching verification or normalization logic.

@@ -43,9 +43,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`node >= 22`).
 - Base-URL transport-safety tests (HTTPS required; localhost HTTP allowed) —
   suite now 108 passing.
+- Repo style gate: eslint flat config (`eslint.config.mjs`), Prettier
+  (`.prettierrc.json` + `.prettierignore`), markdownlint
+  (`.markdownlint-cli2.jsonc`, docs/ + README), and `.editorconfig`, wired as
+  the `lint`, `format`, `format:check`, and `lint:md` scripts and a CI style
+  step; no runtime source behavior change.
 
 ### Changed
 
+- Linked the design-provenance reference to the public sibling repo:
+  `docs/API.md` and the `createCertnClient` JSDoc in `src/client.ts` now point
+  "vopay-client" at <https://github.com/victorsalmon/vopay-client>.
 - Bumped GitHub Actions pins to `actions/checkout@v7` and
   `actions/setup-node@v7`, keeping `node-version-file: .nvmrc`, `cache: npm`,
   and both `npm audit --audit-level=high` gates with the

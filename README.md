@@ -390,9 +390,16 @@ npm install
 npm run typecheck
 npm test
 npm run build
+npm run lint         # eslint (flat config)
+npm run format:check # prettier --check on src/, test/, examples/
+npm run lint:md      # markdownlint on docs/ and README.md
 npm audit --omit=dev --audit-level=high  # prod-tree audit (CI gate; fails on HIGH-or-worse; re-run after upgrades or `npm audit fix`)
 npm audit --audit-level=high              # full-tree audit incl. dev deps (CI gate; fails on HIGH-or-worse; re-run after upgrades or `npm audit fix`)
 ```
+
+`npm run format` rewrites `src/`, `test/`, and `examples/` in place; the style
+configs (`eslint.config.mjs`, `.prettierrc.json`, `.markdownlint-cli2.jsonc`,
+`.editorconfig`) are dev-only and ship nothing to consumers.
 
 ### Dependency audit
 
@@ -416,7 +423,7 @@ Toolchain provenance — the TypeScript side-by-side aliases (`tsc` = TS7,
 
 ## Project layout
 
-```
+```text
 src/
   index.ts       # public surface
   client.ts      # CertnClient class
